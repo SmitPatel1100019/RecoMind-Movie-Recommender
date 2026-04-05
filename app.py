@@ -16,6 +16,14 @@ DATA_DIR = os.path.join(ROOT_DIR, "Data", "MovieLens")
 MOVIES_CSV_LOCAL = os.path.join(DATA_DIR, "movies.csv")
 RATINGS_CSV_LOCAL = os.path.join(DATA_DIR, "ratings.csv")
 
+MOOD_GENRE_MAP = {
+    "Happy 😊":        {"Comedy", "Family", "Animation"},
+    "Tense 🎬":        {"Thriller", "Crime", "Mystery"},
+    "Thoughtful 🧠":   {"Drama", "Documentary", "History"},
+    "Adventurous 🚀":  {"Action", "Adventure", "Sci-Fi"},
+    "Romantic 💕":     {"Romance"},
+}
+
 FILTERED_DATA_CSV_LOCAL = os.path.join(DATA_DIR, "filtered_data.csv")
 FILTERED_MOVIES_DATA_CSV_LOCAL = os.path.join(DATA_DIR, "filtered_movies_data.csv")
 
@@ -352,6 +360,17 @@ def main() -> None:
             st.caption("No genre tags in the loaded data — filter unavailable.")
             excluded_genre_pick = []
         excluded_frozen = frozenset(excluded_genre_pick)
+
+        st.divider()
+        st.subheader("Mood Mode 🎭")
+        st.caption("Boosts movies that match your current mood.")
+        mood_pick = st.selectbox(
+            "How are you feeling?",
+            options=["No preference"] + list(MOOD_GENRE_MAP.keys()),
+            index=0,
+        )
+        mood_genres = MOOD_GENRE_MAP.get(mood_pick, set())
+
         st.divider()
         st.subheader("TMDB posters")
         if tmdb_key:
@@ -438,6 +457,19 @@ def main() -> None:
                 )
 
             st.success("Recommendations generated successfully!")
+
+            if mood_pick != "No preference":
+                st.info(f"🎭 Mood Mode active: **{mood_pick}** — matching movies ranked first.")
+
+            if mood_genres and not recs.empty:
+                recs["mood_match"] = recs["genres"].apply(
+                    lambda g: bool(genres_string_to_set(g) & mood_genres)
+                )
+                recs = pd.concat([
+                    recs[recs["mood_match"]],
+                    recs[~recs["mood_match"]]
+                ]).drop(columns=["mood_match"]).reset_index(drop=True)
+
             st.markdown(
                 f"**Why these movies?** They are **most similar** to **{selected_movie}** in the training data: "
                 "users who rated your pick tended to rate these titles in a similar way. "
