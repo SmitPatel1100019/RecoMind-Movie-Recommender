@@ -400,184 +400,274 @@ def main() -> None:
             st.warning("No key: set `TMDB_API_KEY` in secrets or environment.")
             st.caption("Streamlit Cloud: App settings → Secrets → `TMDB_API_KEY = \"...\"`")
 
-    df_ratings, _, _, _ = load_and_prepare_data(
-        top_n_movies=last["top_n_movies"],
-        top_n_users=last["top_n_users"],
-    )
-    top_counts = df_ratings["title"].value_counts().head(10)
-    trending = pd.DataFrame(
-        {
-            "Movie": top_counts.index,
-            "Ratings in subset": top_counts.values.astype(int),
-        }
-    )
-    trending["Year"] = trending["Movie"].map(extract_year_from_title)
-    trending["Genres"] = trending["Movie"].map(lambda t: genres_map.get(t, "—"))
-    if excluded_frozen:
-        keep = trending["Genres"].map(
-            lambda gs: not movie_matches_excluded_genres(str(gs), excluded_frozen)
+    tab1, tab2 = st.tabs(["🎬 Recommendations", "📊 Dashboard & Analysis"])
+
+    with tab1:
+        df_ratings, _, _, _ = load_and_prepare_data(
+            top_n_movies=last["top_n_movies"],
+            top_n_users=last["top_n_users"],
         )
-        trending = trending[keep]
+        top_counts = df_ratings["title"].value_counts().head(10)
+        trending = pd.DataFrame(
+            {
+                "Movie": top_counts.index,
+                "Ratings in subset": top_counts.values.astype(int),
+            }
+        )
+        trending["Year"] = trending["Movie"].map(extract_year_from_title)
+        trending["Genres"] = trending["Movie"].map(lambda t: genres_map.get(t, "—"))
+        if excluded_frozen:
+            keep = trending["Genres"].map(
+                lambda gs: not movie_matches_excluded_genres(str(gs), excluded_frozen)
+            )
+            trending = trending[keep]
+            if trending.empty:
+                trending = pd.DataFrame(columns=["Movie", "Ratings in subset", "Year", "Genres"])
+    
+        st.subheader("Trending in this dataset")
+        st.caption("Most-rated titles in the training subset (respects genre exclusions).")
         if trending.empty:
-            trending = pd.DataFrame(columns=["Movie", "Ratings in subset", "Year", "Genres"])
-
-    st.subheader("Trending in this dataset")
-    st.caption("Most-rated titles in the training subset (respects genre exclusions).")
-    if trending.empty:
-        st.info("No trending rows left with the current genre exclusions.")
-    else:
-        st.dataframe(trending, use_container_width=True, hide_index=True)
-
-    st.divider()
-
-    all_sorted = sorted(movie_titles.tolist())
-    search_q = st.text_input(
-        "Search movies",
-        value="",
-        placeholder="Type part of a title (e.g. Toy Story)…",
-    )
-    q = search_q.strip().lower()
-    filtered_titles = [t for t in all_sorted if q in t.lower()] if q else all_sorted
-    if not filtered_titles:
-        st.warning("No matches — reset search to see the full list.")
-        filtered_titles = all_sorted
-
-    selected_movie = st.selectbox(
-        "Pick a movie",
-        options=filtered_titles,
-        index=None,
-        placeholder="Select a movie...",
-    )
-
-    if selected_movie:
-        g = genres_map.get(selected_movie, "—") or "—"
-        y = extract_year_from_title(selected_movie)
-        pc, mc = st.columns([1, 2])
-        with pc:
-            show_poster_for_title(tmdb_key, selected_movie)
-        with mc:
-            st.write(f"**Year:** {y}")
-            st.write(f"**Genres:** {g}")
-    else:
-        st.info("Search and select a movie, then press **Recommend**.")
-
-    st.divider()
-    st.subheader("Top Recommendations")
-
-    if st.button("Recommend", type="primary"):
-        if selected_movie:
-            with st.spinner("Generating recommendations..."):
-                recs = recommend_from_similarity(
-                    sim_matrix=sim_matrix,
-                    movie_titles=movie_titles,
-                    movie_name=selected_movie,
-                    genres_map=genres_map,
-                    title_to_index=title_to_index,
-                    top_k=top_k,
-                    excluded_genres=excluded_frozen,
-                )
-
-            # Save to watch history (max 5, no duplicates)
-            history: List[str] = st.session_state["watch_history"]
-            if selected_movie not in history:
-                history.insert(0, selected_movie)
-                st.session_state["watch_history"] = history[:5]
-                
-            st.success("Recommendations generated successfully!")
-
-            if mood_pick != "No preference":
-                st.info(f"🎭 Mood Mode active: **{mood_pick}** — matching movies ranked first.")
-
-            if mood_genres and not recs.empty:
-                recs["mood_match"] = recs["genres"].apply(
-                    lambda g: bool(genres_string_to_set(g) & mood_genres)
-                )
-                recs = pd.concat([
-                    recs[recs["mood_match"]],
-                    recs[~recs["mood_match"]]
-                ]).drop(columns=["mood_match"]).reset_index(drop=True)
-
-            st.markdown(
-                f"**Why these movies?** They are **most similar** to **{selected_movie}** in the training data: "
-                "users who rated your pick tended to rate these titles in a similar way. "
-                "**Similarity** is cosine similarity between movie rating vectors (closer to **1** means more alike)."
-            )
-            if excluded_genre_pick:
-                st.caption(f"Genre filter active — excluded: {', '.join(sorted(excluded_genre_pick))}")
-            if recs.empty:
-                st.warning(
-                    "No rows after filtering. Loosen **Exclude genres** or pick another anchor movie."
-                )
-            else:
-                display = pd.DataFrame(
-                    {
-                        "Movie": recs["movie"],
-                        "Similarity": recs["score"].round(4),
-                        "Year": recs["movie"].map(extract_year_from_title),
-                        "Genres": recs["genres"].replace("", "—"),
-                        "Sentiment": recs["genres"].apply(genre_sentiment_label),
-                    }
-                )
-                st.dataframe(display, use_container_width=True, hide_index=True)
-                n_post = min(5, len(recs))
-                if tmdb_key and n_post:
-                    st.subheader("Posters — top suggestions")
-                    cols = st.columns(n_post)
-                    for j in range(n_post):
-                        title_j = str(recs["movie"].iloc[j])
-                        with cols[j]:
-                            show_poster_for_title(tmdb_key, title_j, title_j[:42])
+            st.info("No trending rows left with the current genre exclusions.")
         else:
-            st.warning("Please select a movie first.")
-
-    # ── Recent history + personalised picks ──────────────────────────
-    history = st.session_state.get("watch_history", [])
-    if history:
+            st.dataframe(trending, use_container_width=True, hide_index=True)
+    
         st.divider()
-        st.subheader("🕓 Your Recent Picks")
-        st.caption("Movies you explored this session.")
-        st.write(" · ".join(history))
-
-        st.subheader("🎯 Based on Your Recent Picks")
-        st.caption("Blended recommendations from your last selections.")
-
-        all_recs: List[pd.DataFrame] = []
-        for h_title in history:
-            if h_title in title_to_index:
-                h_recs = recommend_from_similarity(
-                    sim_matrix=sim_matrix,
-                    movie_titles=movie_titles,
-                    movie_name=h_title,
-                    genres_map=genres_map,
-                    title_to_index=title_to_index,
-                    top_k=20,
-                    excluded_genres=excluded_frozen,
-                )
-                all_recs.append(h_recs)
-
-        if all_recs:
-            combined = pd.concat(all_recs)
-            combined = combined[~combined["movie"].isin(history)]
-            combined = (
-                combined.groupby("movie", as_index=False)
-                .agg({"score": "mean", "genres": "first"})
-                .sort_values("score", ascending=False)
-                .head(10)
-                .reset_index(drop=True)
-            )
-            display_history = pd.DataFrame({
-                "Movie": combined["movie"],
-                "Avg Similarity": combined["score"].round(4),
-                "Year": combined["movie"].map(extract_year_from_title),
-                "Genres": combined["genres"].replace("", "—"),
-                "Sentiment": combined["genres"].apply(genre_sentiment_label),
-            })
-            st.dataframe(display_history, use_container_width=True, hide_index=True)
+    
+        all_sorted = sorted(movie_titles.tolist())
+        search_q = st.text_input(
+            "Search movies",
+            value="",
+            placeholder="Type part of a title (e.g. Toy Story)…",
+        )
+        q = search_q.strip().lower()
+        filtered_titles = [t for t in all_sorted if q in t.lower()] if q else all_sorted
+        if not filtered_titles:
+            st.warning("No matches — reset search to see the full list.")
+            filtered_titles = all_sorted
+    
+        selected_movie = st.selectbox(
+            "Pick a movie",
+            options=filtered_titles,
+            index=None,
+            placeholder="Select a movie...",
+        )
+    
+        if selected_movie:
+            g = genres_map.get(selected_movie, "—") or "—"
+            y = extract_year_from_title(selected_movie)
+            pc, mc = st.columns([1, 2])
+            with pc:
+                show_poster_for_title(tmdb_key, selected_movie)
+            with mc:
+                st.write(f"**Year:** {y}")
+                st.write(f"**Genres:** {g}")
         else:
-            st.info("No blended recommendations yet — explore more movies.")
+            st.info("Search and select a movie, then press **Recommend**.")
+    
+        st.divider()
+        st.subheader("Top Recommendations")
+    
+        if st.button("Recommend", type="primary"):
+            if selected_movie:
+                with st.spinner("Generating recommendations..."):
+                    recs = recommend_from_similarity(
+                        sim_matrix=sim_matrix,
+                        movie_titles=movie_titles,
+                        movie_name=selected_movie,
+                        genres_map=genres_map,
+                        title_to_index=title_to_index,
+                        top_k=top_k,
+                        excluded_genres=excluded_frozen,
+                    )
+    
+                # Save to watch history (max 5, no duplicates)
+                history: List[str] = st.session_state["watch_history"]
+                if selected_movie not in history:
+                    history.insert(0, selected_movie)
+                    st.session_state["watch_history"] = history[:5]
+                    
+                st.success("Recommendations generated successfully!")
+    
+                if mood_pick != "No preference":
+                    st.info(f"🎭 Mood Mode active: **{mood_pick}** — matching movies ranked first.")
+    
+                if mood_genres and not recs.empty:
+                    recs["mood_match"] = recs["genres"].apply(
+                        lambda g: bool(genres_string_to_set(g) & mood_genres)
+                    )
+                    recs = pd.concat([
+                        recs[recs["mood_match"]],
+                        recs[~recs["mood_match"]]
+                    ]).drop(columns=["mood_match"]).reset_index(drop=True)
+    
+                st.markdown(
+                    f"**Why these movies?** They are **most similar** to **{selected_movie}** in the training data: "
+                    "users who rated your pick tended to rate these titles in a similar way. "
+                    "**Similarity** is cosine similarity between movie rating vectors (closer to **1** means more alike)."
+                )
+                if excluded_genre_pick:
+                    st.caption(f"Genre filter active — excluded: {', '.join(sorted(excluded_genre_pick))}")
+                if recs.empty:
+                    st.warning(
+                        "No rows after filtering. Loosen **Exclude genres** or pick another anchor movie."
+                    )
+                else:
+                    display = pd.DataFrame(
+                        {
+                            "Movie": recs["movie"],
+                            "Similarity": recs["score"].round(4),
+                            "Year": recs["movie"].map(extract_year_from_title),
+                            "Genres": recs["genres"].replace("", "—"),
+                            "Sentiment": recs["genres"].apply(genre_sentiment_label),
+                        }
+                    )
+                    st.dataframe(display, use_container_width=True, hide_index=True)
+                    n_post = min(5, len(recs))
+                    if tmdb_key and n_post:
+                        st.subheader("Posters — top suggestions")
+                        cols = st.columns(n_post)
+                        for j in range(n_post):
+                            title_j = str(recs["movie"].iloc[j])
+                            with cols[j]:
+                                show_poster_for_title(tmdb_key, title_j, title_j[:42])
+            else:
+                st.warning("Please select a movie first.")
 
-    st.markdown("---")
-    st.write("RecoMind | Built by Smit Patel 🚀")
+    with tab2:
+        st.subheader("📊 Dataset Dashboard")
+        st.caption("Analysis of the MovieLens training subset.")
+
+        import plotly.express as px
+
+        df_dash, _, _, _ = load_and_prepare_data(
+            top_n_movies=last["top_n_movies"],
+            top_n_users=last["top_n_users"],
+        )
+
+        # ── Chart 1: Rating Distribution ──
+        st.markdown("#### ⭐ Rating Distribution")
+        rating_counts = df_dash["rating"].value_counts().sort_index().reset_index()
+        rating_counts.columns = ["Rating", "Count"]
+        fig1 = px.bar(
+            rating_counts,
+            x="Rating",
+            y="Count",
+            color="Count",
+            color_continuous_scale="Blues",
+            title="How users rated movies",
+        )
+        st.plotly_chart(fig1, use_container_width=True)
+
+        # ── Chart 2: Top 10 Most Rated Movies ──
+        st.markdown("#### 🎬 Top 10 Most Rated Movies")
+        top_movies_df = (
+            df_dash["title"].value_counts().head(10).reset_index()
+        )
+        top_movies_df.columns = ["Movie", "Number of Ratings"]
+        fig2 = px.bar(
+            top_movies_df,
+            x="Number of Ratings",
+            y="Movie",
+            orientation="h",
+            color="Number of Ratings",
+            color_continuous_scale="Teal",
+            title="Most rated movies in training subset",
+        )
+        fig2.update_layout(yaxis={"categoryorder": "total ascending"})
+        st.plotly_chart(fig2, use_container_width=True)
+
+        # ── Chart 3: Genre Distribution ──
+        st.markdown("#### 🎭 Genre Distribution")
+        if genres_map:
+            all_genres: List[str] = []
+            for g in genres_map.values():
+                all_genres.extend(genres_string_to_set(g))
+            genre_series = pd.Series(all_genres).value_counts().reset_index()
+            genre_series.columns = ["Genre", "Count"]
+            fig3 = px.pie(
+                genre_series,
+                names="Genre",
+                values="Count",
+                title="Genre breakdown across dataset",
+                hole=0.3,
+            )
+            st.plotly_chart(fig3, use_container_width=True)
+        else:
+            st.info("No genre data available.")
+
+        # ── Chart 4: Sentiment Distribution ──
+        st.markdown("#### 🧠 Sentiment Distribution Across Genres")
+        if genres_map:
+            sentiment_labels = [
+                genre_sentiment_label(g) for g in genres_map.values()
+            ]
+            sentiment_df = pd.Series(sentiment_labels).value_counts().reset_index()
+            sentiment_df.columns = ["Sentiment", "Count"]
+            fig4 = px.bar(
+                sentiment_df,
+                x="Sentiment",
+                y="Count",
+                color="Sentiment",
+                color_discrete_map={
+                    "Positive 😊": "#2ecc71",
+                    "Neutral 😐": "#95a5a6",
+                    "Negative 😟": "#e74c3c",
+                },
+                title="Emotional tone of movies in dataset",
+            )
+            st.plotly_chart(fig4, use_container_width=True)
+        else:
+            st.info("No genre data for sentiment analysis.")  
+            
+    with tab1:
+        # ── Recent history + personalised picks ──────────────────────────
+        history = st.session_state.get("watch_history", [])
+        if history:
+            st.divider()
+            st.subheader("🕓 Your Recent Picks")
+            st.caption("Movies you explored this session.")
+            st.write(" · ".join(history))
+
+            st.subheader("🎯 Based on Your Recent Picks")
+            st.caption("Blended recommendations from your last selections.")
+
+            all_recs: List[pd.DataFrame] = []
+            for h_title in history:
+                if h_title in title_to_index:
+                    h_recs = recommend_from_similarity(
+                        sim_matrix=sim_matrix,
+                        movie_titles=movie_titles,
+                        movie_name=h_title,
+                        genres_map=genres_map,
+                        title_to_index=title_to_index,
+                        top_k=20,
+                        excluded_genres=excluded_frozen,
+                    )
+                    all_recs.append(h_recs)
+
+            if all_recs:
+                combined = pd.concat(all_recs)
+                combined = combined[~combined["movie"].isin(history)]
+                combined = (
+                    combined.groupby("movie", as_index=False)
+                    .agg({"score": "mean", "genres": "first"})
+                    .sort_values("score", ascending=False)
+                    .head(10)
+                    .reset_index(drop=True)
+                )
+                display_history = pd.DataFrame({
+                    "Movie": combined["movie"],
+                    "Avg Similarity": combined["score"].round(4),
+                    "Year": combined["movie"].map(extract_year_from_title),
+                    "Genres": combined["genres"].replace("", "—"),
+                    "Sentiment": combined["genres"].apply(genre_sentiment_label),
+                })
+                st.dataframe(display_history, use_container_width=True, hide_index=True)
+            else:
+                st.info("No blended recommendations yet — explore more movies.")
+
+        st.markdown("---")
+        st.write("RecoMind | Built by Smit Patel 🚀")
 
 if __name__ == "__main__":
     main()
