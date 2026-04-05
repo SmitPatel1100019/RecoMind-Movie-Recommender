@@ -196,6 +196,23 @@ def collect_genre_options(genres_map: Dict[str, str]) -> List[str]:
         found.update(genres_string_to_set(g))
     return sorted(found)
 
+def genre_sentiment_label(genres_str: str) -> str:
+    """
+    Uses TextBlob to score the emotional tone of a genre string
+    and returns a human-readable sentiment label.
+    """
+    from textblob import TextBlob
+    if not genres_str or genres_str == "—":
+        return "Neutral 😐"
+    # Replace pipe separators with spaces so TextBlob reads it as natural text
+    text = genres_str.replace("|", " ")
+    polarity = TextBlob(text).sentiment.polarity
+    if polarity > 0.05:
+        return "Positive 😊"
+    elif polarity < -0.05:
+        return "Negative 😟"
+    else:
+        return "Neutral 😐"
 
 def movie_matches_excluded_genres(genres_str: str, excluded: FrozenSet[str]) -> bool:
     if not excluded:
@@ -498,6 +515,7 @@ def main() -> None:
                         "Similarity": recs["score"].round(4),
                         "Year": recs["movie"].map(extract_year_from_title),
                         "Genres": recs["genres"].replace("", "—"),
+                        "Sentiment": recs["genres"].apply(genre_sentiment_label),
                     }
                 )
                 st.dataframe(display, use_container_width=True, hide_index=True)
@@ -552,6 +570,7 @@ def main() -> None:
                 "Avg Similarity": combined["score"].round(4),
                 "Year": combined["movie"].map(extract_year_from_title),
                 "Genres": combined["genres"].replace("", "—"),
+                "Sentiment": combined["genres"].apply(genre_sentiment_label),
             })
             st.dataframe(display_history, use_container_width=True, hide_index=True)
         else:
