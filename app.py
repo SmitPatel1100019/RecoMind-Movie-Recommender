@@ -512,7 +512,7 @@ def main() -> None:
         if trending.empty:
             st.info("No trending rows left with the current genre exclusions.")
         else:
-            st.dataframe(trending, use_container_width=True, hide_index=True)
+            st.table(trending)
 
         st.divider()
 
@@ -578,7 +578,7 @@ def main() -> None:
             scored_df = pd.DataFrame(scored)
 
             st.markdown("**📋 Sample Reviews**")
-            st.dataframe(scored_df, use_container_width=True, hide_index=True)
+            st.table(scored_df)
 
             sentiment_counts = scored_df["Sentiment"].value_counts().reset_index()
             sentiment_counts.columns = ["Sentiment", "Count"]
@@ -675,7 +675,7 @@ def main() -> None:
                             "Sentiment": recs["genres"].apply(genre_sentiment_label),
                         }
                     )
-                    st.dataframe(display, use_container_width=True, hide_index=True)
+                    st.table(display)
                     n_post = min(5, len(recs))
                     if tmdb_key and n_post:
                         st.subheader("Posters — top suggestions")
@@ -728,7 +728,7 @@ def main() -> None:
                     "Genres": combined["genres"].replace("", "—"),
                     "Sentiment": combined["genres"].apply(genre_sentiment_label),
                 })
-                st.dataframe(display_history, use_container_width=True, hide_index=True)
+                st.table(display_history)
             else:
                 st.info("No blended recommendations yet — explore more movies.")
 
