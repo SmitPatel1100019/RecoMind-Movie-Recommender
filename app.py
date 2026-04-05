@@ -329,6 +329,10 @@ def main() -> None:
 
         top_k = st.slider("Recommendations to show", min_value=5, max_value=30, value=10, step=1)
 
+    # User history — initialize once per session
+    if "watch_history" not in st.session_state:
+        st.session_state["watch_history"] = []
+        
     # Cache rebuild is keyed by these args; using a button prevents constant retraining on every rerun.
     if "last_built_params" not in st.session_state or build_submit:
         st.session_state["last_built_params"] = {"top_n_movies": top_n_movies, "top_n_users": top_n_users}
@@ -456,6 +460,12 @@ def main() -> None:
                     excluded_genres=excluded_frozen,
                 )
 
+            # Save to watch history (max 5, no duplicates)
+            history: List[str] = st.session_state["watch_history"]
+            if selected_movie not in history:
+                history.insert(0, selected_movie)
+                st.session_state["watch_history"] = history[:5]
+                
             st.success("Recommendations generated successfully!")
 
             if mood_pick != "No preference":
@@ -502,9 +512,53 @@ def main() -> None:
         else:
             st.warning("Please select a movie first.")
 
+    # ── Recent history + personalised picks ──────────────────────────
+    history = st.session_state.get("watch_history", [])
+    if history:
+        st.divider()
+        st.subheader("🕓 Your Recent Picks")
+        st.caption("Movies you explored this session.")
+        st.write(" · ".join(history))
+
+        st.subheader("🎯 Based on Your Recent Picks")
+        st.caption("Blended recommendations from your last selections.")
+
+        all_recs: List[pd.DataFrame] = []
+        for h_title in history:
+            if h_title in title_to_index:
+                h_recs = recommend_from_similarity(
+                    sim_matrix=sim_matrix,
+                    movie_titles=movie_titles,
+                    movie_name=h_title,
+                    genres_map=genres_map,
+                    title_to_index=title_to_index,
+                    top_k=20,
+                    excluded_genres=excluded_frozen,
+                )
+                all_recs.append(h_recs)
+
+        if all_recs:
+            combined = pd.concat(all_recs)
+            combined = combined[~combined["movie"].isin(history)]
+            combined = (
+                combined.groupby("movie", as_index=False)
+                .agg({"score": "mean", "genres": "first"})
+                .sort_values("score", ascending=False)
+                .head(10)
+                .reset_index(drop=True)
+            )
+            display_history = pd.DataFrame({
+                "Movie": combined["movie"],
+                "Avg Similarity": combined["score"].round(4),
+                "Year": combined["movie"].map(extract_year_from_title),
+                "Genres": combined["genres"].replace("", "—"),
+            })
+            st.dataframe(display_history, use_container_width=True, hide_index=True)
+        else:
+            st.info("No blended recommendations yet — explore more movies.")
+
     st.markdown("---")
     st.write("RecoMind | Built by Smit Patel 🚀")
-
 
 if __name__ == "__main__":
     main()
