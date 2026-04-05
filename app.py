@@ -16,12 +16,63 @@ DATA_DIR = os.path.join(ROOT_DIR, "Data", "MovieLens")
 MOVIES_CSV_LOCAL = os.path.join(DATA_DIR, "movies.csv")
 RATINGS_CSV_LOCAL = os.path.join(DATA_DIR, "ratings.csv")
 
+SAMPLE_REVIEWS = {
+    "default": [
+        "This movie was absolutely fantastic, I loved every moment of it!",
+        "It was okay, nothing special but not terrible either.",
+        "Disappointing experience, the plot made no sense at all.",
+    ],
+    "Toy Story (1995)": [
+        "A timeless classic that appeals to both kids and adults!",
+        "Good animation for its time, story is decent.",
+        "Felt a bit slow in the middle but overall enjoyable.",
+    ],
+    "Pulp Fiction (1994)": [
+        "Tarantino at his absolute best, a masterpiece of cinema.",
+        "Interesting structure but not for everyone.",
+        "Too violent and confusing for my taste.",
+    ],
+    "The Shawshank Redemption (1994)": [
+        "One of the greatest films ever made, deeply moving.",
+        "A solid drama with great performances.",
+        "Overrated in my opinion, too slow paced.",
+    ],
+    "Forrest Gump (1994)": [
+        "Beautiful, emotional and uplifting from start to finish!",
+        "Tom Hanks is great but the story drags at times.",
+        "Not my kind of movie but I can see why people like it.",
+    ],
+}
+
 MOOD_GENRE_MAP = {
     "Happy 😊":        {"Comedy", "Family", "Animation"},
     "Tense 🎬":        {"Thriller", "Crime", "Mystery"},
     "Thoughtful 🧠":   {"Drama", "Documentary", "History"},
     "Adventurous 🚀":  {"Action", "Adventure", "Sci-Fi"},
     "Romantic 💕":     {"Romance"},
+}
+
+GENRE_SENTIMENT_MAP: Dict[str, str] = {
+    "Animation":   "Positive 😊",
+    "Comedy":      "Positive 😊",
+    "Family":      "Positive 😊",
+    "Fantasy":     "Positive 😊",
+    "Adventure":   "Positive 😊",
+    "Musical":     "Positive 😊",
+    "Romance":     "Positive 😊",
+    "Horror":      "Negative 😟",
+    "Thriller":    "Negative 😟",
+    "Crime":       "Negative 😟",
+    "War":         "Negative 😟",
+    "Film-Noir":   "Negative 😟",
+    "Action":      "Neutral 😐",
+    "Drama":       "Neutral 😐",
+    "Sci-Fi":      "Neutral 😐",
+    "Mystery":     "Neutral 😐",
+    "Documentary": "Neutral 😐",
+    "History":     "Neutral 😐",
+    "Western":     "Neutral 😐",
+    "IMAX":        "Neutral 😐",
 }
 
 FILTERED_DATA_CSV_LOCAL = os.path.join(DATA_DIR, "filtered_data.csv")
@@ -32,25 +83,16 @@ ML_LATEST_SMALL_DIR = os.path.join(DATA_DIR, "ml-latest-small")
 
 
 def _ensure_data_downloaded() -> Tuple[str, str]:
-    """
-    Ensures we have a MovieLens movies.csv and ratings.csv available locally.
-
-    If your large local CSVs exist, we use them.
-    Otherwise, we download the smaller `ml-latest-small` dataset for GitHub deploys.
-    """
-    # Use user's large local dataset if present
     if os.path.exists(MOVIES_CSV_LOCAL) and os.path.exists(RATINGS_CSV_LOCAL):
         return MOVIES_CSV_LOCAL, RATINGS_CSV_LOCAL
 
     os.makedirs(DATA_DIR, exist_ok=True)
 
-    # If the smaller dataset already exists, use it
     extracted_movies = os.path.join(ML_LATEST_SMALL_DIR, "movies.csv")
     extracted_ratings = os.path.join(ML_LATEST_SMALL_DIR, "ratings.csv")
     if os.path.exists(extracted_movies) and os.path.exists(extracted_ratings):
         return extracted_movies, extracted_ratings
 
-    # Download and extract
     zip_path = os.path.join(DATA_DIR, "ml-latest-small.zip")
     with st.spinner("Downloading MovieLens (ml-latest-small) ..."):
         urllib.request.urlretrieve(ML_LATEST_SMALL_URL, zip_path)
@@ -58,7 +100,6 @@ def _ensure_data_downloaded() -> Tuple[str, str]:
     with zipfile.ZipFile(zip_path, "r") as zf:
         zf.extractall(DATA_DIR)
 
-    # After extraction, paths should exist
     if not (os.path.exists(extracted_movies) and os.path.exists(extracted_ratings)):
         raise FileNotFoundError("MovieLens download completed, but CSVs were not found.")
 
@@ -70,17 +111,7 @@ def load_and_prepare_data(
     top_n_movies: int,
     top_n_users: int,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, Dict[str, str]]:
-    """
-    Builds the user-movie rating matrix using the same approach as the notebook:
-    - merge ratings + movies
-    - filter to top N movies by rating frequency
-    - filter to top N active users by rating frequency
-    - create a user x movie matrix and fill missing with 0
-    """
-    # Fast path: if you already created a filtered CSV (recommended),
-    # we avoid re-merging + re-filtering at runtime.
     filtered_source = None
-    # Prefer the small, deploy-friendly file first.
     if os.path.exists(FILTERED_MOVIES_DATA_CSV_LOCAL):
         filtered_source = FILTERED_MOVIES_DATA_CSV_LOCAL
     elif os.path.exists(FILTERED_DATA_CSV_LOCAL):
@@ -94,7 +125,6 @@ def load_and_prepare_data(
                 "expected at least userId, title, rating."
             )
 
-        # If genres are missing from the file, we'll still build the matrix.
         if "genres" in df.columns:
             genres_map = (
                 df[["title", "genres"]]
@@ -110,11 +140,9 @@ def load_and_prepare_data(
             .fillna(0)
         )
 
-        # `movies` is only used for genres_map; keep placeholder
         movies = df[["title"]].drop_duplicates().rename(columns={"title": "title"})
         return df, movies, user_movie_matrix, genres_map
 
-    # Default path: use (downloaded or local) MovieLens CSVs and filter at runtime.
     movies_path, ratings_path = _ensure_data_downloaded()
 
     movies = pd.read_csv(movies_path)
@@ -123,14 +151,12 @@ def load_and_prepare_data(
     df = pd.merge(ratings, movies, on="movieId")
     df.dropna(inplace=True)
 
-    # Strong filtering to keep the matrix small and stable
     top_movies = df["title"].value_counts().head(top_n_movies).index
     df = df[df["title"].isin(top_movies)]
 
     active_users = df["userId"].value_counts().head(top_n_users).index
     df = df[df["userId"].isin(active_users)]
 
-    # Genres map for display
     genres_map = (
         movies[["title", "genres"]]
         .drop_duplicates(subset=["title"])
@@ -138,7 +164,6 @@ def load_and_prepare_data(
         .to_dict()
     )
 
-    # user x title matrix with missing ratings set to 0
     user_movie_matrix = (
         df.pivot_table(index="userId", columns="title", values="rating", aggfunc="mean")
         .fillna(0)
@@ -152,23 +177,15 @@ def build_recommender(
     top_n_movies: int,
     top_n_users: int,
 ) -> Tuple[np.ndarray, Dict[str, str], pd.Index, Dict[str, int]]:
-    """
-    Returns:
-    - sim_matrix: cosine similarity between movies (movies x movies)
-    - genres_map: title -> genres string
-    - movie_titles: index of movies corresponding to sim_matrix rows/cols
-    """
     _, _, user_movie_matrix, genres_map = load_and_prepare_data(
         top_n_movies=top_n_movies, top_n_users=top_n_users
     )
 
-    # Build cosine similarity matrix once (fast recommendations afterwards).
-    # user_movie_matrix: shape (users, movies). We want similarity between movie columns.
-    X = user_movie_matrix.to_numpy(dtype=np.float32)  # (U, M)
-    col_norms = np.linalg.norm(X, axis=0)  # (M,)
+    X = user_movie_matrix.to_numpy(dtype=np.float32)
+    col_norms = np.linalg.norm(X, axis=0)
     col_norms[col_norms == 0] = 1e-8
-    Xn = X / col_norms  # (U, M)
-    sim_matrix = Xn.T @ Xn  # (M, M)
+    Xn = X / col_norms
+    sim_matrix = Xn.T @ Xn
 
     movie_titles = user_movie_matrix.columns
     title_to_index = {title: i for i, title in enumerate(movie_titles)}
@@ -196,23 +213,19 @@ def collect_genre_options(genres_map: Dict[str, str]) -> List[str]:
         found.update(genres_string_to_set(g))
     return sorted(found)
 
+
 def genre_sentiment_label(genres_str: str) -> str:
-    """
-    Uses TextBlob to score the emotional tone of a genre string
-    and returns a human-readable sentiment label.
-    """
-    from textblob import TextBlob
+    """Returns a sentiment label based on the dominant genre tone."""
     if not genres_str or genres_str == "—":
         return "Neutral 😐"
-    # Replace pipe separators with spaces so TextBlob reads it as natural text
-    text = genres_str.replace("|", " ")
-    polarity = TextBlob(text).sentiment.polarity
-    if polarity > 0.05:
+    tags = genres_string_to_set(genres_str)
+    sentiments = {GENRE_SENTIMENT_MAP.get(tag, "Neutral 😐") for tag in tags}
+    if "Positive 😊" in sentiments:
         return "Positive 😊"
-    elif polarity < -0.05:
+    if "Negative 😟" in sentiments:
         return "Negative 😟"
-    else:
-        return "Neutral 😐"
+    return "Neutral 😐"
+
 
 def movie_matches_excluded_genres(genres_str: str, excluded: FrozenSet[str]) -> bool:
     if not excluded:
@@ -318,14 +331,6 @@ def main() -> None:
 
     with st.sidebar:
         st.header("Recommendation Settings")
-        if os.path.exists(FILTERED_DATA_CSV_LOCAL) or os.path.exists(FILTERED_MOVIES_DATA_CSV_LOCAL):
-            st.markdown(
-                "**Speed mode**: Found a filtered CSV in `Data/MovieLens` (filters are loaded directly)."
-            )
-        else:
-            st.markdown(
-                "**Speed mode**: If you create `Data/MovieLens/filtered_data.csv` (or `filtered_movies_data.csv`), model building becomes much faster."
-            )
 
         with st.form("train_form"):
             top_n_movies = st.slider(
@@ -346,11 +351,9 @@ def main() -> None:
 
         top_k = st.slider("Recommendations to show", min_value=5, max_value=30, value=10, step=1)
 
-    # User history — initialize once per session
     if "watch_history" not in st.session_state:
         st.session_state["watch_history"] = []
-        
-    # Cache rebuild is keyed by these args; using a button prevents constant retraining on every rerun.
+
     if "last_built_params" not in st.session_state or build_submit:
         st.session_state["last_built_params"] = {"top_n_movies": top_n_movies, "top_n_users": top_n_users}
 
@@ -402,7 +405,87 @@ def main() -> None:
 
     tab1, tab2 = st.tabs(["🎬 Recommendations", "📊 Dashboard & Analysis"])
 
+    with tab2:
+        st.subheader("📊 Dataset Dashboard")
+        st.caption("Analysis of the MovieLens training subset.")
+
+        import plotly.express as px
+
+        df_dash, _, _, _ = load_and_prepare_data(
+            top_n_movies=last["top_n_movies"],
+            top_n_users=last["top_n_users"],
+        )
+
+        st.markdown("#### ⭐ Rating Distribution")
+        rating_counts = df_dash["rating"].value_counts().sort_index().reset_index()
+        rating_counts.columns = ["Rating", "Count"]
+        fig1 = px.bar(
+            rating_counts,
+            x="Rating",
+            y="Count",
+            color="Count",
+            color_continuous_scale="Blues",
+            title="How users rated movies",
+        )
+        st.plotly_chart(fig1, use_container_width=True)
+
+        st.markdown("#### 🎬 Top 10 Most Rated Movies")
+        top_movies_df = df_dash["title"].value_counts().head(10).reset_index()
+        top_movies_df.columns = ["Movie", "Number of Ratings"]
+        fig2 = px.bar(
+            top_movies_df,
+            x="Number of Ratings",
+            y="Movie",
+            orientation="h",
+            color="Number of Ratings",
+            color_continuous_scale="Teal",
+            title="Most rated movies in training subset",
+        )
+        fig2.update_layout(yaxis={"categoryorder": "total ascending"})
+        st.plotly_chart(fig2, use_container_width=True)
+
+        st.markdown("#### 🎭 Genre Distribution")
+        if genres_map:
+            all_genres: List[str] = []
+            for g in genres_map.values():
+                all_genres.extend(genres_string_to_set(g))
+            genre_series = pd.Series(all_genres).value_counts().reset_index()
+            genre_series.columns = ["Genre", "Count"]
+            fig3 = px.pie(
+                genre_series,
+                names="Genre",
+                values="Count",
+                title="Genre breakdown across dataset",
+                hole=0.3,
+            )
+            st.plotly_chart(fig3, use_container_width=True)
+        else:
+            st.info("No genre data available.")
+
+        st.markdown("#### 🧠 Sentiment Distribution Across Genres")
+        if genres_map:
+            sentiment_labels = [genre_sentiment_label(g) for g in genres_map.values()]
+            sentiment_df = pd.Series(sentiment_labels).value_counts().reset_index()
+            sentiment_df.columns = ["Sentiment", "Count"]
+            fig4 = px.bar(
+                sentiment_df,
+                x="Sentiment",
+                y="Count",
+                color="Sentiment",
+                color_discrete_map={
+                    "Positive 😊": "#2ecc71",
+                    "Neutral 😐": "#95a5a6",
+                    "Negative 😟": "#e74c3c",
+                },
+                title="Emotional tone of movies in dataset",
+            )
+            st.plotly_chart(fig4, use_container_width=True)
+        else:
+            st.info("No genre data for sentiment analysis.")
+
     with tab1:
+        import plotly.express as px
+
         df_ratings, _, _, _ = load_and_prepare_data(
             top_n_movies=last["top_n_movies"],
             top_n_users=last["top_n_users"],
@@ -423,16 +506,16 @@ def main() -> None:
             trending = trending[keep]
             if trending.empty:
                 trending = pd.DataFrame(columns=["Movie", "Ratings in subset", "Year", "Genres"])
-    
+
         st.subheader("Trending in this dataset")
         st.caption("Most-rated titles in the training subset (respects genre exclusions).")
         if trending.empty:
             st.info("No trending rows left with the current genre exclusions.")
         else:
             st.dataframe(trending, use_container_width=True, hide_index=True)
-    
+
         st.divider()
-    
+
         all_sorted = sorted(movie_titles.tolist())
         search_q = st.text_input(
             "Search movies",
@@ -444,14 +527,14 @@ def main() -> None:
         if not filtered_titles:
             st.warning("No matches — reset search to see the full list.")
             filtered_titles = all_sorted
-    
+
         selected_movie = st.selectbox(
             "Pick a movie",
             options=filtered_titles,
             index=None,
             placeholder="Select a movie...",
         )
-    
+
         if selected_movie:
             g = genres_map.get(selected_movie, "—") or "—"
             y = extract_year_from_title(selected_movie)
@@ -463,10 +546,82 @@ def main() -> None:
                 st.write(f"**Genres:** {g}")
         else:
             st.info("Search and select a movie, then press **Recommend**.")
-    
+
+        if selected_movie:
+            st.divider()
+            st.subheader("🎭 Audience Sentiment Analysis")
+            st.caption("Sentiment analysis of audience reviews using TextBlob NLP.")
+
+            from textblob import TextBlob
+
+            reviews = SAMPLE_REVIEWS.get(selected_movie, SAMPLE_REVIEWS["default"])
+
+            is_default_reviews = selected_movie not in SAMPLE_REVIEWS
+            if is_default_reviews:
+                st.warning(
+                    "⚠️ No specific reviews are available for this title. "
+                    "The sentiment analysis below uses **generic placeholder reviews** "
+                    "and does **not** reflect actual audience opinions for this movie."
+                )
+
+            scored = []
+            for r in reviews:
+                pol = TextBlob(r).sentiment.polarity
+                if pol > 0.05:
+                    label = "Positive 😊"
+                elif pol < -0.05:
+                    label = "Negative 😟"
+                else:
+                    label = "Neutral 😐"
+                scored.append({"Review": r, "Sentiment": label, "Polarity": round(pol, 3)})
+
+            scored_df = pd.DataFrame(scored)
+
+            st.markdown("**📋 Sample Reviews**")
+            st.dataframe(scored_df, use_container_width=True, hide_index=True)
+
+            sentiment_counts = scored_df["Sentiment"].value_counts().reset_index()
+            sentiment_counts.columns = ["Sentiment", "Count"]
+            fig_sent = px.pie(
+                sentiment_counts,
+                names="Sentiment",
+                values="Count",
+                color="Sentiment",
+                color_discrete_map={
+                    "Positive 😊": "#2ecc71",
+                    "Neutral 😐": "#95a5a6",
+                    "Negative 😟": "#e74c3c",
+                },
+                title="Sentiment Distribution",
+                hole=0.3,
+            )
+            st.plotly_chart(fig_sent, use_container_width=True)
+
+            avg_pol = scored_df["Polarity"].mean()
+            overall = "Positive 😊" if avg_pol > 0.05 else ("Negative 😟" if avg_pol < -0.05 else "Neutral 😐")
+            col1, col2 = st.columns(2)
+            col1.metric("Overall Audience Mood", overall)
+            col2.metric("Avg Polarity Score", f"{avg_pol:.2f} / 1.0")
+
+            st.markdown("**✍️ Analyse Your Own Review**")
+            user_review = st.text_area(
+                "Type a review for this movie:",
+                placeholder="e.g. This movie was incredible, loved the acting and storyline!",
+                height=100,
+            )
+            if user_review.strip():
+                user_pol = TextBlob(user_review).sentiment.polarity
+                if user_pol > 0.05:
+                    user_label = "Positive 😊"
+                elif user_pol < -0.05:
+                    user_label = "Negative 😟"
+                else:
+                    user_label = "Neutral 😐"
+                st.success(f"**Your review sentiment:** {user_label} (Polarity: {user_pol:.3f})")
+
         st.divider()
         st.subheader("Top Recommendations")
-    
+
         if st.button("Recommend", type="primary"):
             if selected_movie:
                 with st.spinner("Generating recommendations..."):
@@ -479,18 +634,17 @@ def main() -> None:
                         top_k=top_k,
                         excluded_genres=excluded_frozen,
                     )
-    
-                # Save to watch history (max 5, no duplicates)
+
                 history: List[str] = st.session_state["watch_history"]
                 if selected_movie not in history:
                     history.insert(0, selected_movie)
                     st.session_state["watch_history"] = history[:5]
-                    
+
                 st.success("Recommendations generated successfully!")
-    
+
                 if mood_pick != "No preference":
                     st.info(f"🎭 Mood Mode active: **{mood_pick}** — matching movies ranked first.")
-    
+
                 if mood_genres and not recs.empty:
                     recs["mood_match"] = recs["genres"].apply(
                         lambda g: bool(genres_string_to_set(g) & mood_genres)
@@ -499,7 +653,7 @@ def main() -> None:
                         recs[recs["mood_match"]],
                         recs[~recs["mood_match"]]
                     ]).drop(columns=["mood_match"]).reset_index(drop=True)
-    
+
                 st.markdown(
                     f"**Why these movies?** They are **most similar** to **{selected_movie}** in the training data: "
                     "users who rated your pick tended to rate these titles in a similar way. "
@@ -533,94 +687,6 @@ def main() -> None:
             else:
                 st.warning("Please select a movie first.")
 
-    with tab2:
-        st.subheader("📊 Dataset Dashboard")
-        st.caption("Analysis of the MovieLens training subset.")
-
-        import plotly.express as px
-
-        df_dash, _, _, _ = load_and_prepare_data(
-            top_n_movies=last["top_n_movies"],
-            top_n_users=last["top_n_users"],
-        )
-
-        # ── Chart 1: Rating Distribution ──
-        st.markdown("#### ⭐ Rating Distribution")
-        rating_counts = df_dash["rating"].value_counts().sort_index().reset_index()
-        rating_counts.columns = ["Rating", "Count"]
-        fig1 = px.bar(
-            rating_counts,
-            x="Rating",
-            y="Count",
-            color="Count",
-            color_continuous_scale="Blues",
-            title="How users rated movies",
-        )
-        st.plotly_chart(fig1, use_container_width=True)
-
-        # ── Chart 2: Top 10 Most Rated Movies ──
-        st.markdown("#### 🎬 Top 10 Most Rated Movies")
-        top_movies_df = (
-            df_dash["title"].value_counts().head(10).reset_index()
-        )
-        top_movies_df.columns = ["Movie", "Number of Ratings"]
-        fig2 = px.bar(
-            top_movies_df,
-            x="Number of Ratings",
-            y="Movie",
-            orientation="h",
-            color="Number of Ratings",
-            color_continuous_scale="Teal",
-            title="Most rated movies in training subset",
-        )
-        fig2.update_layout(yaxis={"categoryorder": "total ascending"})
-        st.plotly_chart(fig2, use_container_width=True)
-
-        # ── Chart 3: Genre Distribution ──
-        st.markdown("#### 🎭 Genre Distribution")
-        if genres_map:
-            all_genres: List[str] = []
-            for g in genres_map.values():
-                all_genres.extend(genres_string_to_set(g))
-            genre_series = pd.Series(all_genres).value_counts().reset_index()
-            genre_series.columns = ["Genre", "Count"]
-            fig3 = px.pie(
-                genre_series,
-                names="Genre",
-                values="Count",
-                title="Genre breakdown across dataset",
-                hole=0.3,
-            )
-            st.plotly_chart(fig3, use_container_width=True)
-        else:
-            st.info("No genre data available.")
-
-        # ── Chart 4: Sentiment Distribution ──
-        st.markdown("#### 🧠 Sentiment Distribution Across Genres")
-        if genres_map:
-            sentiment_labels = [
-                genre_sentiment_label(g) for g in genres_map.values()
-            ]
-            sentiment_df = pd.Series(sentiment_labels).value_counts().reset_index()
-            sentiment_df.columns = ["Sentiment", "Count"]
-            fig4 = px.bar(
-                sentiment_df,
-                x="Sentiment",
-                y="Count",
-                color="Sentiment",
-                color_discrete_map={
-                    "Positive 😊": "#2ecc71",
-                    "Neutral 😐": "#95a5a6",
-                    "Negative 😟": "#e74c3c",
-                },
-                title="Emotional tone of movies in dataset",
-            )
-            st.plotly_chart(fig4, use_container_width=True)
-        else:
-            st.info("No genre data for sentiment analysis.")  
-            
-    with tab1:
-        # ── Recent history + personalised picks ──────────────────────────
         history = st.session_state.get("watch_history", [])
         if history:
             st.divider()
@@ -669,6 +735,6 @@ def main() -> None:
         st.markdown("---")
         st.write("RecoMind | Built by Smit Patel 🚀")
 
+
 if __name__ == "__main__":
     main()
-
