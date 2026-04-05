@@ -1,4 +1,5 @@
 import os
+import re
 import zipfile
 import urllib.request
 from typing import Dict, Tuple
@@ -165,6 +166,11 @@ def build_recommender(
     return sim_matrix, genres_map, movie_titles, title_to_index
 
 
+def extract_year_from_title(title: str) -> str:
+    m = re.search(r"\((\d{4})\)\s*$", str(title))
+    return m.group(1) if m else "—"
+
+
 def recommend_from_similarity(
     sim_matrix: np.ndarray,
     movie_titles: pd.Index,
@@ -194,6 +200,10 @@ def main() -> None:
     st.set_page_config(page_title="RecoMind", page_icon="🎬", layout="centered")
     st.title("RecoMind - Movie Recommendations")
     st.caption("Collaborative filtering using cosine similarity over user ratings.")
+    st.info(
+        "Pick a movie you like, then tap **Recommend**. "
+        "We suggest titles that received **similar rating patterns** from users in the dataset."
+    )
 
     with st.sidebar:
         st.header("Recommendation Settings")
@@ -230,29 +240,82 @@ def main() -> None:
         st.session_state["last_built_params"] = {"top_n_movies": top_n_movies, "top_n_users": top_n_users}
 
     last = st.session_state.get("last_built_params", {"top_n_movies": 100, "top_n_users": 500})
-    sim_matrix, genres_map, movie_titles, title_to_index = build_recommender(
+    with st.spinner("Building model... please wait"):
+        sim_matrix, genres_map, movie_titles, title_to_index = build_recommender(
+            top_n_movies=last["top_n_movies"],
+            top_n_users=last["top_n_users"],
+        )
+
+    df_ratings, _, _, _ = load_and_prepare_data(
         top_n_movies=last["top_n_movies"],
         top_n_users=last["top_n_users"],
     )
+    top_counts = df_ratings["title"].value_counts().head(10)
+    trending = pd.DataFrame(
+        {
+            "Movie": top_counts.index,
+            "Ratings in subset": top_counts.values.astype(int),
+        }
+    )
+    trending["Year"] = trending["Movie"].map(extract_year_from_title)
+    trending["Genres"] = trending["Movie"].map(lambda t: genres_map.get(t, "—"))
 
-    selected_movie = st.selectbox("Pick a movie", options=sorted(movie_titles.tolist()))
+    st.subheader("Trending in this dataset")
+    st.caption("Most-rated titles among the movies/users used to train the model (popularity in your filtered data).")
+    st.dataframe(trending, use_container_width=True, hide_index=True)
+
+    st.divider()
+
+    selected_movie = st.selectbox(
+        "Pick a movie",
+        options=sorted(movie_titles.tolist()),
+        index=None,
+        placeholder="Select a movie...",
+    )
+
+    if selected_movie:
+        g = genres_map.get(selected_movie, "—") or "—"
+        y = extract_year_from_title(selected_movie)
+        st.write(f"**Year:** {y}")
+        st.write(f"**Genres:** {g}")
+    else:
+        st.info("Select a movie from the list, then press **Recommend** for personalized suggestions.")
 
     st.divider()
     st.subheader("Top Recommendations")
 
-    recs = recommend_from_similarity(
-        sim_matrix=sim_matrix,
-        movie_titles=movie_titles,
-        movie_name=selected_movie,
-        genres_map=genres_map,
-        title_to_index=title_to_index,
-        top_k=top_k,
-    )
+    if st.button("Recommend", type="primary"):
+        if selected_movie:
+            with st.spinner("Generating recommendations..."):
+                recs = recommend_from_similarity(
+                    sim_matrix=sim_matrix,
+                    movie_titles=movie_titles,
+                    movie_name=selected_movie,
+                    genres_map=genres_map,
+                    title_to_index=title_to_index,
+                    top_k=top_k,
+                )
 
-    # Simple, readable display
-    st.dataframe(recs, use_container_width=True)
-    if selected_movie in genres_map:
-        st.info(f"Selected movie genres: {genres_map.get(selected_movie, '')}")
+            st.success("Recommendations generated successfully!")
+            st.markdown(
+                f"**Why these movies?** They are **most similar** to **{selected_movie}** in the training data: "
+                "users who rated your pick tended to rate these titles in a similar way. "
+                "**Similarity** is cosine similarity between movie rating vectors (closer to **1** means more alike)."
+            )
+            display = pd.DataFrame(
+                {
+                    "Movie": recs["movie"],
+                    "Similarity": recs["score"].round(4),
+                    "Year": recs["movie"].map(extract_year_from_title),
+                    "Genres": recs["genres"].replace("", "—"),
+                }
+            )
+            st.dataframe(display, use_container_width=True, hide_index=True)
+        else:
+            st.warning("Please select a movie first.")
+
+    st.markdown("---")
+    st.write("RecoMind | Built by Smit Patel 🚀")
 
 
 if __name__ == "__main__":
