@@ -427,6 +427,11 @@ def main() -> None:
             color_continuous_scale="Blues",
             title="How users rated movies",
         )
+        fig1.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font_color="#ffffff",
+        )
         st.plotly_chart(fig1, use_container_width=True)
 
         st.markdown("#### 🎬 Top 10 Most Rated Movies")
@@ -441,7 +446,12 @@ def main() -> None:
             color_continuous_scale="Teal",
             title="Most rated movies in training subset",
         )
-        fig2.update_layout(yaxis={"categoryorder": "total ascending"})
+        fig2.update_layout(
+            yaxis={"categoryorder": "total ascending"},
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font_color="#ffffff",
+        )
         st.plotly_chart(fig2, use_container_width=True)
 
         st.markdown("#### 🎭 Genre Distribution")
@@ -457,6 +467,12 @@ def main() -> None:
                 values="Count",
                 title="Genre breakdown across dataset",
                 hole=0.3,
+            )
+            fig3.update_traces(textposition="inside", textinfo="percent+label")
+            fig3.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                font_color="#ffffff",
+                showlegend=False,
             )
             st.plotly_chart(fig3, use_container_width=True)
         else:
@@ -478,6 +494,11 @@ def main() -> None:
                     "Negative 😟": "#e74c3c",
                 },
                 title="Emotional tone of movies in dataset",
+            )
+            fig4.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font_color="#ffffff",
             )
             st.plotly_chart(fig4, use_container_width=True)
         else:
@@ -594,6 +615,12 @@ def main() -> None:
                 },
                 title="Sentiment Distribution",
                 hole=0.3,
+            )
+            fig_sent.update_traces(textposition="inside", textinfo="percent+label")
+            fig_sent.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                font_color="#ffffff",
+                showlegend=False,
             )
             st.plotly_chart(fig_sent, use_container_width=True)
 
