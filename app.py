@@ -94,124 +94,89 @@ FILTERED_MOVIES_DATA_CSV_LOCAL = os.path.join(DATA_DIR, "filtered_movies_data.cs
 ML_LATEST_SMALL_URL = "https://files.grouplens.org/datasets/movielens/ml-latest-small.zip"
 ML_LATEST_SMALL_DIR = os.path.join(DATA_DIR, "ml-latest-small")
 
+# ─────────────────────────────────────────────────────────────────
+#  CSS — dark, compact, professional
+# ─────────────────────────────────────────────────────────────────
 DARK_CARD_CSS = """
 <style>
-.search-card {
-    background: #0e1117;
-    border: 1px solid #2d2d2d;
-    border-radius: 10px;
-    padding: 1.4rem 1.6rem 1rem 1.6rem;
-    margin-bottom: 1.2rem;
-}
-.search-card-title {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: #ffffff;
-    margin-bottom: 0.2rem;
-}
-.search-card-sub {
-    font-size: 0.82rem;
-    color: #888;
-    margin-bottom: 1rem;
-}
-.found-count {
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: #ccc;
-    margin: 0.5rem 0 0.8rem 0;
-}
-.movie-detail-card {
-    background: #0e1117;
-    border: 1px solid #2d2d2d;
-    border-radius: 10px;
-    padding: 1.2rem 1.4rem;
-    margin-bottom: 1rem;
-}
-.movie-title-card {
-    font-size: 1.3rem;
-    font-weight: 700;
-    color: #ffffff;
-    margin-bottom: 0.5rem;
-}
-.movie-meta-line {
-    font-size: 0.9rem;
-    color: #ccc;
-    margin-bottom: 0.3rem;
-}
-.movie-meta-label {
-    font-weight: 600;
-    color: #ffffff;
-}
-.movie-rating {
-    color: #f5c518;
-    font-weight: 700;
-}
-.movie-synopsis {
-    font-size: 0.88rem;
-    color: #aaa;
-    margin-top: 0.6rem;
-    line-height: 1.55;
-    border-top: 1px solid #2d2d2d;
-    padding-top: 0.6rem;
-}
-.rec-card {
-    background: #0e1117;
-    border: 1px solid #2d2d2d;
-    border-radius: 8px;
-    padding: 0.9rem 1.1rem;
-    margin-bottom: 0.5rem;
-}
-.rec-title {
-    font-size: 1rem;
-    font-weight: 700;
-    color: #fff;
-}
-.rec-meta {
-    font-size: 0.82rem;
-    color: #999;
-    margin-top: 0.2rem;
-}
-.rec-score {
-    font-size: 0.85rem;
-    color: #02C39A;
-    font-weight: 600;
-}
-.mood-badge {
-    display: inline-block;
-    background: #1a3a2a;
-    color: #02C39A;
-    border-radius: 4px;
-    padding: 1px 8px;
-    font-size: 0.78rem;
-    margin-left: 6px;
-}
+/* ── base ── */
+.search-card{background:#0e1117;border:1px solid #2d2d2d;border-radius:10px;
+  padding:1.4rem 1.6rem 1rem;margin-bottom:1.2rem}
+.search-card-title{font-size:1.25rem;font-weight:700;color:#fff;margin-bottom:.2rem}
+.search-card-sub{font-size:.82rem;color:#888;margin-bottom:1rem}
+.found-count{font-size:.9rem;font-weight:600;color:#ccc;margin:.5rem 0 .8rem}
+
+/* ── movie detail ── */
+.movie-detail-card{background:#0e1117;border:1px solid #2d2d2d;border-radius:10px;
+  padding:1.2rem 1.4rem;margin-bottom:1rem}
+.movie-title-card{font-size:1.3rem;font-weight:700;color:#fff;margin-bottom:.5rem}
+.movie-meta-line{font-size:.9rem;color:#ccc;margin-bottom:.3rem}
+.movie-meta-label{font-weight:600;color:#fff}
+.movie-rating{color:#f5c518;font-weight:700}
+.movie-synopsis{font-size:.88rem;color:#aaa;margin-top:.6rem;line-height:1.55;
+  border-top:1px solid #2d2d2d;padding-top:.6rem}
+
+/* ── rec cards ── */
+.rec-card{background:#0e1117;border:1px solid #2d2d2d;border-radius:8px;
+  padding:.9rem 1.1rem;margin-bottom:.5rem}
+.rec-title{font-size:1rem;font-weight:700;color:#fff}
+.rec-meta{font-size:.82rem;color:#999;margin-top:.2rem}
+.rec-score{font-size:.85rem;color:#02C39A;font-weight:600}
+.mood-badge{display:inline-block;background:#1a3a2a;color:#02C39A;border-radius:4px;
+  padding:1px 8px;font-size:.78rem;margin-left:6px}
+
+/* ── ENHANCED: mood / wellbeing sections ── */
+.filter-panel{background:#111827;border:1px solid #1e3a5f;border-radius:12px;
+  padding:1.4rem 1.6rem;margin-bottom:1.4rem}
+.filter-panel-title{font-size:1.1rem;font-weight:700;color:#60a5fa;
+  margin-bottom:.25rem;letter-spacing:.02em}
+.filter-panel-sub{font-size:.8rem;color:#6b7280;margin-bottom:1rem}
+
+.wellbeing-panel{background:#111827;border:1px solid #3d1f5e;border-radius:12px;
+  padding:1.4rem 1.6rem;margin-bottom:1.4rem}
+.wellbeing-panel-title{font-size:1.1rem;font-weight:700;color:#a78bfa;
+  margin-bottom:.25rem;letter-spacing:.02em}
+.wellbeing-panel-sub{font-size:.8rem;color:#6b7280;margin-bottom:1rem}
+
+.helper-msg{background:#0f1f2e;border:1px dashed #1e3a5f;border-radius:8px;
+  padding:.9rem 1.2rem;color:#4b7fa8;font-size:.9rem;text-align:center;
+  margin:1rem 0}
+.active-banner{border-radius:8px;padding:.7rem 1.1rem;
+  font-size:.88rem;font-weight:600;margin-bottom:.8rem}
+.mood-active{background:#0d2d1a;border:1px solid #02C39A;color:#02C39A}
+.well-active{background:#1e0d3a;border:1px solid #a78bfa;color:#a78bfa}
+.both-active{background:#0d1f30;border:1px solid #60a5fa;color:#60a5fa}
+
+.section-divider{border:none;border-top:1px solid #1f2937;margin:1.6rem 0}
+.rec-section-header{font-size:1.05rem;font-weight:700;color:#e5e7eb;
+  margin:.5rem 0 .9rem;letter-spacing:.01em}
 </style>
 """
 
 
+# ─────────────────────────────────────────────────────────────────
+#  Data helpers  (unchanged from original)
+# ─────────────────────────────────────────────────────────────────
 def _ensure_data_downloaded() -> Tuple[str, str]:
     if os.path.exists(MOVIES_CSV_LOCAL) and os.path.exists(RATINGS_CSV_LOCAL):
         return MOVIES_CSV_LOCAL, RATINGS_CSV_LOCAL
     os.makedirs(DATA_DIR, exist_ok=True)
-    extracted_movies = os.path.join(ML_LATEST_SMALL_DIR, "movies.csv")
+    extracted_movies  = os.path.join(ML_LATEST_SMALL_DIR, "movies.csv")
     extracted_ratings = os.path.join(ML_LATEST_SMALL_DIR, "ratings.csv")
     if os.path.exists(extracted_movies) and os.path.exists(extracted_ratings):
         return extracted_movies, extracted_ratings
     zip_path = os.path.join(DATA_DIR, "ml-latest-small.zip")
-    with st.spinner("Downloading MovieLens (ml-latest-small) ..."):
+    with st.spinner("Downloading MovieLens …"):
         urllib.request.urlretrieve(ML_LATEST_SMALL_URL, zip_path)
     with zipfile.ZipFile(zip_path, "r") as zf:
         zf.extractall(DATA_DIR)
     if not (os.path.exists(extracted_movies) and os.path.exists(extracted_ratings)):
-        raise FileNotFoundError("MovieLens download completed, but CSVs were not found.")
+        raise FileNotFoundError("MovieLens download completed, but CSVs not found.")
     return extracted_movies, extracted_ratings
 
 
 @st.cache_data(show_spinner=False)
-def load_and_prepare_data(
-    top_n_movies: int,
-    top_n_users: int,
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, Dict[str, str]]:
+def load_and_prepare_data(top_n_movies: int, top_n_users: int):
     filtered_source = None
     if os.path.exists(FILTERED_MOVIES_DATA_CSV_LOCAL):
         filtered_source = FILTERED_MOVIES_DATA_CSV_LOCAL
@@ -221,32 +186,34 @@ def load_and_prepare_data(
     if filtered_source is not None:
         df = pd.read_csv(filtered_source)
         if not {"userId", "title", "rating"}.issubset(df.columns):
-            raise ValueError("Filtered CSV missing required columns: userId, title, rating.")
+            raise ValueError("Filtered CSV missing required columns.")
         genres_map = (
-            df[["title", "genres"]].drop_duplicates(subset=["title"])
+            df[["title", "genres"]].drop_duplicates("title")
             .set_index("title")["genres"].to_dict()
         ) if "genres" in df.columns else {}
         user_movie_matrix = (
-            df.pivot_table(index="userId", columns="title", values="rating", aggfunc="mean").fillna(0)
+            df.pivot_table(index="userId", columns="title",
+                           values="rating", aggfunc="mean").fillna(0)
         )
         movies = df[["title"]].drop_duplicates()
         return df, movies, user_movie_matrix, genres_map
 
     movies_path, ratings_path = _ensure_data_downloaded()
-    movies = pd.read_csv(movies_path)
+    movies  = pd.read_csv(movies_path)
     ratings = pd.read_csv(ratings_path)
     df = pd.merge(ratings, movies, on="movieId")
     df.dropna(inplace=True)
-    top_movies = df["title"].value_counts().head(top_n_movies).index
-    df = df[df["title"].isin(top_movies)]
+    top_movies   = df["title"].value_counts().head(top_n_movies).index
+    df           = df[df["title"].isin(top_movies)]
     active_users = df["userId"].value_counts().head(top_n_users).index
-    df = df[df["userId"].isin(active_users)]
-    genres_map = (
-        movies[["title", "genres"]].drop_duplicates(subset=["title"])
+    df           = df[df["userId"].isin(active_users)]
+    genres_map   = (
+        movies[["title", "genres"]].drop_duplicates("title")
         .set_index("title")["genres"].to_dict()
     )
     user_movie_matrix = (
-        df.pivot_table(index="userId", columns="title", values="rating", aggfunc="mean").fillna(0)
+        df.pivot_table(index="userId", columns="title",
+                       values="rating", aggfunc="mean").fillna(0)
     )
     return df, movies, user_movie_matrix, genres_map
 
@@ -258,42 +225,38 @@ def compute_avg_ratings(top_n_movies: int, top_n_users: int) -> Dict[str, float]
 
 
 @st.cache_resource(show_spinner=True)
-def build_recommender(
-    top_n_movies: int,
-    top_n_users: int,
-) -> Tuple[np.ndarray, Dict[str, str], pd.Index, Dict[str, int]]:
+def build_recommender(top_n_movies: int, top_n_users: int):
     _, _, user_movie_matrix, genres_map = load_and_prepare_data(top_n_movies, top_n_users)
-    X = user_movie_matrix.to_numpy(dtype=np.float32)
-    col_norms = np.linalg.norm(X, axis=0)
+    X          = user_movie_matrix.to_numpy(dtype=np.float32)
+    col_norms  = np.linalg.norm(X, axis=0)
     col_norms[col_norms == 0] = 1e-8
-    Xn = X / col_norms
+    Xn         = X / col_norms
     sim_matrix = Xn.T @ Xn
-    movie_titles = user_movie_matrix.columns
-    title_to_index = {title: i for i, title in enumerate(movie_titles)}
+    movie_titles   = user_movie_matrix.columns
+    title_to_index = {t: i for i, t in enumerate(movie_titles)}
     return sim_matrix, genres_map, movie_titles, title_to_index
 
 
+# ─────────────────────────────────────────────────────────────────
+#  Utility helpers  (unchanged)
+# ─────────────────────────────────────────────────────────────────
 def extract_year_from_title(title: str) -> str:
     m = re.search(r"\((\d{4})\)\s*$", str(title))
     return m.group(1) if m else "—"
 
-
 def clean_title_for_tmdb(full_title: str) -> str:
     return re.sub(r"\s*\(\d{4}\)\s*$", "", str(full_title)).strip()
-
 
 def genres_string_to_set(genres_str: str) -> Set[str]:
     if not genres_str or not str(genres_str).strip():
         return set()
     return {g.strip() for g in str(genres_str).split("|") if g.strip()}
 
-
 def collect_genre_options(genres_map: Dict[str, str]) -> List[str]:
     found: Set[str] = set()
     for g in genres_map.values():
         found.update(genres_string_to_set(g))
     return sorted(found)
-
 
 def genre_sentiment_label(genres_str: str) -> str:
     if not genres_str or genres_str == "—":
@@ -306,12 +269,10 @@ def genre_sentiment_label(genres_str: str) -> str:
         return "Negative 😟"
     return "Neutral 😐"
 
-
 def movie_matches_excluded_genres(genres_str: str, excluded: FrozenSet[str]) -> bool:
     if not excluded:
         return False
     return bool(genres_string_to_set(genres_str) & set(excluded))
-
 
 def _tmdb_api_key() -> Optional[str]:
     k = os.environ.get("TMDB_API_KEY", "").strip()
@@ -322,7 +283,6 @@ def _tmdb_api_key() -> Optional[str]:
     except Exception:
         return None
 
-
 @st.cache_data(ttl=86400, show_spinner=False)
 def tmdb_poster_url(api_key: str, clean_title: str, year_str: str) -> Optional[str]:
     if not api_key or not clean_title:
@@ -331,7 +291,10 @@ def tmdb_poster_url(api_key: str, clean_title: str, year_str: str) -> Optional[s
     if year_str and year_str.isdigit():
         params["year"] = year_str
     try:
-        r = requests.get("https://api.themoviedb.org/3/search/movie", params=params, timeout=12)
+        r = requests.get(
+            "https://api.themoviedb.org/3/search/movie",
+            params=params, timeout=12,
+        )
         if r.status_code != 200:
             return None
         results = (r.json() or {}).get("results") or []
@@ -342,20 +305,132 @@ def tmdb_poster_url(api_key: str, clean_title: str, year_str: str) -> Optional[s
     except requests.RequestException:
         return None
 
-
 def get_poster_url(api_key: Optional[str], full_title: str) -> Optional[str]:
     if not api_key:
         return None
     y = extract_year_from_title(full_title)
-    return tmdb_poster_url(api_key, clean_title_for_tmdb(full_title), y if y != "—" else "")
+    return tmdb_poster_url(api_key, clean_title_for_tmdb(full_title),
+                           y if y != "—" else "")
 
-
-def show_poster_for_title(api_key: Optional[str], full_title: str, caption: Optional[str] = None) -> None:
+def show_poster_for_title(api_key: Optional[str], full_title: str,
+                           caption: Optional[str] = None) -> None:
     if not api_key:
         return
     pu = get_poster_url(api_key, full_title)
     if pu:
         st.image(pu, caption=caption or full_title[:80], use_container_width=True)
+
+
+# ─────────────────────────────────────────────────────────────────
+#  Core CF logic  (unchanged — no modifications to algorithm)
+# ─────────────────────────────────────────────────────────────────
+def recommend_from_similarity(
+    sim_matrix: np.ndarray,
+    movie_titles: pd.Index,
+    genres_map: Dict[str, str],
+    title_to_index: Dict[str, int],
+    movie_name: str,
+    top_k: int,
+    excluded_genres: FrozenSet[str] = frozenset(),
+    mood_genres: Set[str] = set(),
+    mood_boost: float = 0.15,
+    max_scan: int = 4000,
+) -> pd.DataFrame:
+    if movie_name not in movie_titles:
+        return pd.DataFrame([{
+            "movie": movie_name, "score": 0.0,
+            "genres": genres_map.get(movie_name, ""), "mood_match": False,
+        }])
+    movie_index = title_to_index[movie_name]
+    scores = sim_matrix[movie_index].copy()
+
+    if mood_genres:
+        for i, title in enumerate(movie_titles):
+            if i == movie_index:
+                continue
+            if genres_string_to_set(genres_map.get(title, "")) & mood_genres:
+                scores[i] = min(1.0, scores[i] + mood_boost)
+
+    order = np.argsort(-scores)
+    picked_idx: List[int] = []
+    scanned = 0
+    for i in order.tolist():
+        if i == movie_index:
+            continue
+        scanned += 1
+        if scanned > max_scan:
+            break
+        if movie_matches_excluded_genres(genres_map.get(movie_titles[i], ""),
+                                         excluded_genres):
+            continue
+        picked_idx.append(i)
+        if len(picked_idx) >= top_k:
+            break
+
+    if not picked_idx:
+        return pd.DataFrame(columns=["movie", "score", "genres", "mood_match"])
+
+    rec_df = pd.DataFrame({
+        "movie": movie_titles[picked_idx],
+        "score": scores[picked_idx],
+    })
+    rec_df["genres"]     = rec_df["movie"].map(lambda t: genres_map.get(t, ""))
+    rec_df["mood_match"] = rec_df["genres"].apply(
+        lambda g: bool(genres_string_to_set(g) & mood_genres) if mood_genres else False
+    )
+    return rec_df
+
+
+# ─────────────────────────────────────────────────────────────────
+#  Shared render helper
+# ─────────────────────────────────────────────────────────────────
+def render_recommendation_cards(
+    recs: pd.DataFrame,
+    mood_pick: str,
+    avg_ratings: Dict[str, float],
+    api_key: Optional[str],
+    top_k: int,
+) -> None:
+    if recs.empty:
+        st.warning("No recommendations found. Try adjusting filters or picking a different movie.")
+        return
+
+    n_poster = min(5, len(recs))
+    if api_key and n_poster:
+        st.markdown("<div class='rec-section-header'>🖼️ Top Picks — Posters</div>",
+                    unsafe_allow_html=True)
+        cols = st.columns(n_poster)
+        for j in range(n_poster):
+            t = str(recs["movie"].iloc[j])
+            with cols[j]:
+                show_poster_for_title(api_key, t, t[:40])
+        st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
+
+    st.markdown("<div class='rec-section-header'>📋 All Recommendations</div>",
+                unsafe_allow_html=True)
+    for _, row in recs.iterrows():
+        title        = str(row["movie"])
+        score        = float(row["score"])
+        genres_raw   = str(row.get("genres", ""))
+        genres_disp  = genres_raw.replace("|", ", ") if genres_raw and genres_raw != "—" else "—"
+        year         = extract_year_from_title(title)
+        clean        = clean_title_for_tmdb(title)
+        rating       = avg_ratings.get(title)
+        rating_str   = f"⭐ {rating}" if rating else "—"
+        is_mood      = bool(row.get("mood_match", False))
+        mood_badge   = "<span class='mood-badge'>🎭 Mood match</span>" if is_mood else ""
+        sentiment    = genre_sentiment_label(genres_raw)
+
+        st.markdown(
+            f"<div class='rec-card'>"
+            f"<div class='rec-title'>{clean} ({year}){mood_badge}</div>"
+            f"<div class='rec-meta'>🎭 {genres_disp} &nbsp;|&nbsp; "
+            f"<span class='movie-rating'>{rating_str}</span> &nbsp;|&nbsp; "
+            f"{sentiment} &nbsp;|&nbsp; "
+            f"<span class='rec-score'>Similarity: {score:.4f}</span></div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
 
 
 def render_movie_detail_card(
@@ -364,10 +439,10 @@ def render_movie_detail_card(
     avg_rating: Optional[float],
     api_key: Optional[str],
 ) -> None:
-    year = extract_year_from_title(full_title)
-    clean = clean_title_for_tmdb(full_title)
+    year          = extract_year_from_title(full_title)
+    clean         = clean_title_for_tmdb(full_title)
     genres_display = genres_str.replace("|", ", ") if genres_str and genres_str != "—" else "—"
-    synopsis = MOVIE_SYNOPSES.get(full_title, MOVIE_SYNOPSES["default"])
+    synopsis      = MOVIE_SYNOPSES.get(full_title, MOVIE_SYNOPSES["default"])
     rating_display = f"⭐ {avg_rating}" if avg_rating else "—"
 
     poster_col, info_col = st.columns([1, 2.8])
@@ -395,117 +470,263 @@ def render_movie_detail_card(
         )
 
 
-def render_recommendation_cards(
-    recs: pd.DataFrame,
-    mood_pick: str,
-    avg_ratings: Dict[str, float],
-    api_key: Optional[str],
-    top_k: int,
-) -> None:
-    if recs.empty:
-        st.warning("No recommendations found. Try adjusting genre filters or picking a different movie.")
-        return
-
-    n_poster = min(5, len(recs))
-    if api_key and n_poster:
-        st.subheader("🎬 Top Picks — Posters")
-        cols = st.columns(n_poster)
-        for j in range(n_poster):
-            t = str(recs["movie"].iloc[j])
-            with cols[j]:
-                show_poster_for_title(api_key, t, t[:40])
-
-    st.markdown("---")
-    st.subheader("📋 All Recommendations")
-
-    for _, row in recs.iterrows():
-        title = str(row["movie"])
-        score = float(row["score"])
-        genres_raw = str(row.get("genres", ""))
-        genres_display = genres_raw.replace("|", ", ") if genres_raw and genres_raw != "—" else "—"
-        year = extract_year_from_title(title)
-        clean = clean_title_for_tmdb(title)
-        rating = avg_ratings.get(title)
-        rating_str = f"⭐ {rating}" if rating else "—"
-        is_mood = bool(row.get("mood_match", False))
-        mood_badge = "<span class='mood-badge'>🎭 Mood match</span>" if is_mood else ""
-        sentiment = genre_sentiment_label(genres_raw)
-
-        st.markdown(
-            f"<div class='rec-card'>"
-            f"<div class='rec-title'>{clean} ({year}){mood_badge}</div>"
-            f"<div class='rec-meta'>🎭 {genres_display} &nbsp;|&nbsp; "
-            f"<span class='movie-rating'>{rating_str}</span> &nbsp;|&nbsp; "
-            f"{sentiment} &nbsp;|&nbsp; "
-            f"<span class='rec-score'>Similarity: {score:.4f}</span></div>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-
-
-def recommend_from_similarity(
+# ─────────────────────────────────────────────────────────────────
+#  ★ NEW — Reactive Mood Mode tab
+# ─────────────────────────────────────────────────────────────────
+def render_mood_tab(
     sim_matrix: np.ndarray,
     movie_titles: pd.Index,
     genres_map: Dict[str, str],
     title_to_index: Dict[str, int],
-    movie_name: str,
+    avg_ratings: Dict[str, float],
+    excluded_frozen: FrozenSet[str],
+    tmdb_key: Optional[str],
     top_k: int,
-    excluded_genres: FrozenSet[str] = frozenset(),
-    mood_genres: Set[str] = set(),
-    mood_boost: float = 0.15,
-    max_scan: int = 4000,
-) -> pd.DataFrame:
-    if movie_name not in movie_titles:
-        return pd.DataFrame([{
-            "movie": movie_name, "score": 0.0,
-            "genres": genres_map.get(movie_name, ""), "mood_match": False
-        }])
-
-    movie_index = title_to_index[movie_name]
-    scores = sim_matrix[movie_index].copy()
-
-    if mood_genres:
-        for i, title in enumerate(movie_titles):
-            if i == movie_index:
-                continue
-            if genres_string_to_set(genres_map.get(title, "")) & mood_genres:
-                scores[i] = min(1.0, scores[i] + mood_boost)
-
-    order = np.argsort(-scores)
-    picked_idx: List[int] = []
-    scanned = 0
-    for i in order.tolist():
-        if i == movie_index:
-            continue
-        scanned += 1
-        if scanned > max_scan:
-            break
-        if movie_matches_excluded_genres(genres_map.get(movie_titles[i], ""), excluded_genres):
-            continue
-        picked_idx.append(i)
-        if len(picked_idx) >= top_k:
-            break
-
-    if not picked_idx:
-        return pd.DataFrame(columns=["movie", "score", "genres", "mood_match"])
-
-    rec_df = pd.DataFrame({
-        "movie": movie_titles[picked_idx],
-        "score": scores[picked_idx],
-    })
-    rec_df["genres"] = rec_df["movie"].map(lambda t: genres_map.get(t, ""))
-    rec_df["mood_match"] = rec_df["genres"].apply(
-        lambda g: bool(genres_string_to_set(g) & mood_genres) if mood_genres else False
+) -> None:
+    st.markdown(
+        "<div class='filter-panel'>"
+        "<div class='filter-panel-title'>🎭 Mood Mode</div>"
+        "<div class='filter-panel-sub'>"
+        "Pick your current mood — recommendations update instantly, no button needed."
+        "</div></div>",
+        unsafe_allow_html=True,
     )
-    return rec_df
+
+    # ── Movie picker (required anchor for CF) ─────────────────────
+    all_titles = sorted(movie_titles.tolist())
+    if excluded_frozen:
+        all_titles = [
+            t for t in all_titles
+            if not movie_matches_excluded_genres(genres_map.get(t, ""), excluded_frozen)
+        ]
+
+    anchor_movie = st.selectbox(
+        "📽️ Start from a movie you like",
+        options=all_titles,
+        index=None,
+        placeholder="Search or select a movie…",
+        key="mood_anchor",
+    )
+
+    # ── Mood selector — reactive ──────────────────────────────────
+    mood_options = list(MOOD_GENRE_MAP.keys())
+    cols_mood = st.columns(len(mood_options))
+    # Use session_state to track selected mood without a button
+    if "selected_mood" not in st.session_state:
+        st.session_state["selected_mood"] = None
+
+    for i, mood in enumerate(mood_options):
+        with cols_mood[i]:
+            is_active = st.session_state["selected_mood"] == mood
+            label     = f"{'✅ ' if is_active else ''}{mood}"
+            if st.button(label, key=f"mood_btn_{i}", use_container_width=True):
+                # Toggle: click same mood again to deselect
+                if st.session_state["selected_mood"] == mood:
+                    st.session_state["selected_mood"] = None
+                else:
+                    st.session_state["selected_mood"] = mood
+
+    selected_mood  = st.session_state["selected_mood"]
+    mood_genres    = MOOD_GENRE_MAP.get(selected_mood, set()) if selected_mood else set()
+
+    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
+
+    # ── Active filter banner ──────────────────────────────────────
+    has_mood     = selected_mood is not None
+    has_excluded = bool(excluded_frozen)
+
+    if has_mood and has_excluded:
+        st.markdown(
+            f"<div class='active-banner both-active'>"
+            f"🎭 Mood: <b>{selected_mood}</b> &nbsp;+&nbsp; "
+            f"🚫 Excluding: <b>{', '.join(sorted(excluded_frozen))}</b> — "
+            f"both filters active, results update automatically."
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+    elif has_mood:
+        mood_genre_labels = ", ".join(sorted(mood_genres))
+        st.markdown(
+            f"<div class='active-banner mood-active'>"
+            f"🎭 Mood: <b>{selected_mood}</b> — boosting genres: {mood_genre_labels}"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+    elif has_excluded:
+        st.markdown(
+            f"<div class='active-banner well-active'>"
+            f"🚫 Wellbeing filter active — excluding: <b>{', '.join(sorted(excluded_frozen))}</b>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+    # ── Guard: nothing selected yet ───────────────────────────────
+    if not anchor_movie and not has_mood:
+        st.markdown(
+            "<div class='helper-msg'>"
+            "💡 Select a mood above or pick a starting movie to see personalised recommendations."
+            "</div>",
+            unsafe_allow_html=True,
+        )
+        return
+
+    # ── Auto-generate recommendations reactively ──────────────────
+    # If no anchor movie but mood selected → pick top-rated movie in mood genres as anchor
+    if not anchor_movie and has_mood:
+        mood_titles = [
+            t for t in movie_titles
+            if genres_string_to_set(genres_map.get(t, "")) & mood_genres
+            and not movie_matches_excluded_genres(genres_map.get(t, ""), excluded_frozen)
+        ]
+        if not mood_titles:
+            st.warning("No movies found for this mood with the current exclusions. Try changing the Wellbeing filter.")
+            return
+        # Pick the one with highest avg rating as anchor
+        anchor_movie = max(
+            mood_titles,
+            key=lambda t: avg_ratings.get(t, 0.0),
+        )
+        st.caption(f"🔍 Auto-selected anchor: **{clean_title_for_tmdb(anchor_movie)}** (top-rated in mood genre)")
+
+    with st.spinner("Finding mood-matched movies…"):
+        recs = recommend_from_similarity(
+            sim_matrix=sim_matrix,
+            movie_titles=movie_titles,
+            genres_map=genres_map,
+            title_to_index=title_to_index,
+            movie_name=anchor_movie,
+            top_k=top_k,
+            excluded_genres=excluded_frozen,
+            mood_genres=mood_genres,
+        )
+
+    if recs.empty:
+        st.warning("No results with these filters. Try a different mood or fewer exclusions.")
+        return
+
+    render_recommendation_cards(recs, selected_mood or "No preference",
+                                 avg_ratings, tmdb_key, top_k)
 
 
+# ─────────────────────────────────────────────────────────────────
+#  ★ NEW — Reactive Wellbeing Filter tab
+# ─────────────────────────────────────────────────────────────────
+def render_wellbeing_tab(
+    sim_matrix: np.ndarray,
+    movie_titles: pd.Index,
+    genres_map: Dict[str, str],
+    title_to_index: Dict[str, int],
+    avg_ratings: Dict[str, float],
+    genre_options: List[str],
+    tmdb_key: Optional[str],
+    top_k: int,
+) -> None:
+    st.markdown(
+        "<div class='wellbeing-panel'>"
+        "<div class='wellbeing-panel-title'>🛡️ Wellbeing Filter</div>"
+        "<div class='wellbeing-panel-sub'>"
+        "Exclude genres you'd rather avoid — recommendations refresh automatically the moment you change your selection."
+        "</div></div>",
+        unsafe_allow_html=True,
+    )
+
+    # ── Genre exclusion — fully reactive (no button) ──────────────
+    wb_excluded = st.multiselect(
+        "🚫 Genres to exclude",
+        options=genre_options,
+        default=[],
+        placeholder="Choose genres to block…",
+        key="wb_excluded",
+        help="Results update instantly as you add or remove genres.",
+    )
+    wb_frozen = frozenset(wb_excluded)
+
+    # ── Movie picker ──────────────────────────────────────────────
+    all_titles_wb = sorted(movie_titles.tolist())
+    if wb_frozen:
+        all_titles_wb = [
+            t for t in all_titles_wb
+            if not movie_matches_excluded_genres(genres_map.get(t, ""), wb_frozen)
+        ]
+
+    anchor_wb = st.selectbox(
+        "📽️ Pick a movie to base recommendations on",
+        options=all_titles_wb,
+        index=None,
+        placeholder="Search or select…",
+        key="wb_anchor",
+    )
+
+    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
+
+    # ── Active filter status ──────────────────────────────────────
+    if wb_excluded:
+        excluded_str = ", ".join(f"**{g}**" for g in sorted(wb_excluded))
+        st.markdown(
+            f"<div class='active-banner well-active'>"
+            f"🚫 Blocking: {', '.join(sorted(wb_excluded))} — "
+            f"these genres are completely removed from results."
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            "<div class='helper-msg'>"
+            "💡 No genres excluded yet. Select genres above to filter them out, "
+            "or just pick a movie to get standard recommendations."
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+    # ── Guard ─────────────────────────────────────────────────────
+    if not anchor_wb:
+        st.markdown(
+            "<div class='helper-msg'>"
+            "👆 Select a starting movie above to see filtered recommendations."
+            "</div>",
+            unsafe_allow_html=True,
+        )
+        return
+
+    # ── Auto-run — no button ──────────────────────────────────────
+    with st.spinner("Applying wellbeing filter and generating recommendations…"):
+        recs_wb = recommend_from_similarity(
+            sim_matrix=sim_matrix,
+            movie_titles=movie_titles,
+            genres_map=genres_map,
+            title_to_index=title_to_index,
+            movie_name=anchor_wb,
+            top_k=top_k,
+            excluded_genres=wb_frozen,
+            mood_genres=set(),
+        )
+
+    if recs_wb.empty:
+        st.warning("No recommendations left after exclusions. Try removing some blocked genres.")
+        return
+
+    # ── Stats bar ─────────────────────────────────────────────────
+    total_before = top_k + 20  # approximate scan window
+    total_after  = len(recs_wb)
+    if wb_excluded:
+        st.caption(
+            f"✅ Showing **{total_after}** clean recommendations — "
+            f"all results are free of: {', '.join(sorted(wb_excluded))}."
+        )
+
+    render_recommendation_cards(recs_wb, "No preference", avg_ratings, tmdb_key, top_k)
+
+
+# ─────────────────────────────────────────────────────────────────
+#  Main app
+# ─────────────────────────────────────────────────────────────────
 def main() -> None:
     st.set_page_config(page_title="RecoMind", page_icon="🎬", layout="wide")
     st.markdown(DARK_CARD_CSS, unsafe_allow_html=True)
     st.title("🎬 RecoMind — Movie Recommendations")
     st.caption("Collaborative filtering · Cosine similarity · TextBlob NLP")
 
+    # ── Sidebar ───────────────────────────────────────────────────
     with st.sidebar:
         st.header("⚙️ Settings")
         with st.form("train_form"):
@@ -517,52 +738,60 @@ def main() -> None:
     if "watch_history" not in st.session_state:
         st.session_state["watch_history"] = []
     if "last_built_params" not in st.session_state or build_submit:
-        st.session_state["last_built_params"] = {"top_n_movies": top_n_movies, "top_n_users": top_n_users}
+        st.session_state["last_built_params"] = {
+            "top_n_movies": top_n_movies, "top_n_users": top_n_users
+        }
 
-    last = st.session_state.get("last_built_params", {"top_n_movies": 100, "top_n_users": 500})
+    last = st.session_state.get("last_built_params",
+                                 {"top_n_movies": 100, "top_n_users": 500})
 
     with st.spinner("Building model…"):
         sim_matrix, genres_map, movie_titles, title_to_index = build_recommender(
-            top_n_movies=last["top_n_movies"], top_n_users=last["top_n_users"],
+            top_n_movies=last["top_n_movies"],
+            top_n_users=last["top_n_users"],
         )
 
-    avg_ratings = compute_avg_ratings(last["top_n_movies"], last["top_n_users"])
+    avg_ratings   = compute_avg_ratings(last["top_n_movies"], last["top_n_users"])
     genre_options = collect_genre_options(genres_map)
-    tmdb_key = _tmdb_api_key()
+    tmdb_key      = _tmdb_api_key()
 
+    # ── Global sidebar filters ────────────────────────────────────
     with st.sidebar:
         st.divider()
-        st.subheader("🚫 Wellbeing Filter")
-        st.caption("Excludes genres from search, trending, and recommendations.")
-        excluded_genre_pick = st.multiselect("Exclude genres", options=genre_options, default=[]) if genre_options else []
-        excluded_frozen = frozenset(excluded_genre_pick)
-
-        st.divider()
-        st.subheader("🎭 Mood Mode")
-        st.caption("Boosts scores for movies matching your mood.")
-        mood_pick = st.selectbox(
-            "How are you feeling?",
-            options=["No preference"] + list(MOOD_GENRE_MAP.keys()), index=0,
-        )
-        mood_genres: Set[str] = MOOD_GENRE_MAP.get(mood_pick, set())
+        st.subheader("🚫 Global Wellbeing Filter")
+        st.caption("Applies to Search & Recommendations tab.")
+        global_excluded = st.multiselect(
+            "Exclude genres globally", options=genre_options, default=[],
+            key="global_excluded",
+        ) if genre_options else []
+        excluded_frozen = frozenset(global_excluded)
 
         st.divider()
         st.subheader("🖼️ TMDB Posters")
         if tmdb_key:
             st.success("API key found — posters enabled.")
         else:
-            st.warning("Set `TMDB_API_KEY` in secrets to enable posters.")
+            st.warning("Set `TMDB_API_KEY` in secrets.")
 
-    tab1, tab2 = st.tabs(["🎬 Search & Recommendations", "📊 Dashboard & Analysis"])
+    # ── Tabs ──────────────────────────────────────────────────────
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "🎬 Search & Recommendations",
+        "🎭 Mood Mode",
+        "🛡️ Wellbeing Filter",
+        "📊 Dashboard",
+    ])
 
+    # ════════════════════════════════════════════════════════════
+    #  TAB 1 — Search & Recommendations  (original logic preserved)
+    # ════════════════════════════════════════════════════════════
     with tab1:
         import plotly.express as px
 
         df_ratings, _, _, _ = load_and_prepare_data(last["top_n_movies"], last["top_n_users"])
         top_counts = df_ratings["title"].value_counts().head(10)
         trending = pd.DataFrame({
-            "Movie": top_counts.index,
-            "Ratings in subset": top_counts.values.astype(int),
+            "Movie":              top_counts.index,
+            "Ratings in subset":  top_counts.values.astype(int),
         })
         trending["Year"]   = trending["Movie"].map(extract_year_from_title)
         trending["Genres"] = trending["Movie"].map(lambda t: genres_map.get(t, "—"))
@@ -578,11 +807,9 @@ def main() -> None:
             st.table(trending)
 
         st.divider()
-
-        # ── Search Card ───────────────────────────────────────────────────────
         st.markdown(
             "<div class='search-card'>"
-            "<div class='search-card-title'>🔍 Search &amp; 🎭 Recommendations</div>"
+            "<div class='search-card-title'>🔍 Search &amp; 🎯 Recommendations</div>"
             "<div class='search-card-sub'>Filter movies by attributes, then generate recommendations</div>"
             "</div>",
             unsafe_allow_html=True,
@@ -628,7 +855,6 @@ def main() -> None:
             index=None, placeholder="Select a movie…",
         )
 
-        # ── Movie Detail Card ─────────────────────────────────────────────────
         if selected_movie:
             st.markdown("---")
             render_movie_detail_card(
@@ -640,24 +866,20 @@ def main() -> None:
         else:
             st.info("Search and select a movie above, then press **Recommend**.")
 
-        # ── Sentiment Analysis ────────────────────────────────────────────────
+        # Sentiment analysis
         if selected_movie:
             st.divider()
             st.subheader("🎭 Audience Sentiment Analysis")
             st.caption("Sentiment analysis of audience reviews using TextBlob NLP.")
-
             from textblob import TextBlob
 
             reviews = SAMPLE_REVIEWS.get(selected_movie, SAMPLE_REVIEWS["default"])
             if selected_movie not in SAMPLE_REVIEWS:
-                st.warning(
-                    "⚠️ No specific reviews for this title — generic placeholders used. "
-                    "Does not reflect actual audience opinion."
-                )
+                st.warning("⚠️ No specific reviews for this title — generic placeholders used.")
 
             scored = []
             for r in reviews:
-                pol = TextBlob(r).sentiment.polarity
+                pol   = TextBlob(r).sentiment.polarity
                 label = "Positive 😊" if pol > 0.05 else ("Negative 😟" if pol < -0.05 else "Neutral 😐")
                 scored.append({"Review": r, "Sentiment": label, "Polarity": round(pol, 3)})
 
@@ -696,10 +918,9 @@ def main() -> None:
                 ul = "Positive 😊" if up > 0.05 else ("Negative 😟" if up < -0.05 else "Neutral 😐")
                 st.success(f"**Your review sentiment:** {ul} (Polarity: {up:.3f})")
 
-        # ── Recommend ─────────────────────────────────────────────────────────
+        # Recommend button (Tab 1 only — keeps original UX for main search tab)
         st.divider()
         st.subheader("🎯 Top Recommendations")
-
         if st.button("Recommend", type="primary"):
             if selected_movie:
                 with st.spinner("Generating recommendations…"):
@@ -711,54 +932,39 @@ def main() -> None:
                         title_to_index=title_to_index,
                         top_k=top_k,
                         excluded_genres=excluded_frozen,
-                        mood_genres=mood_genres,
+                        mood_genres=set(),
                     )
-
                 history: List[str] = st.session_state["watch_history"]
                 if selected_movie not in history:
                     history.insert(0, selected_movie)
                     st.session_state["watch_history"] = history[:5]
-
-                st.success("✅ Recommendations generated!")
-                b1, b2 = st.columns(2)
-                if mood_pick != "No preference":
-                    b1.info(f"🎭 Mood: **{mood_pick}** — scores boosted +0.15 for matching genres.")
-                if excluded_genre_pick:
-                    b2.warning(f"🚫 Excluded: {', '.join(sorted(excluded_genre_pick))}")
+                if excluded_frozen:
+                    st.warning(f"🚫 Excluded: {', '.join(sorted(excluded_frozen))}")
                 st.caption(
                     f"Movies most similar to **{selected_movie}** by cosine similarity "
                     "over user rating patterns. Score closer to 1 = more alike."
                 )
-                render_recommendation_cards(recs, mood_pick, avg_ratings, tmdb_key, top_k)
+                render_recommendation_cards(recs, "No preference", avg_ratings, tmdb_key, top_k)
             else:
                 st.warning("Please select a movie first.")
 
-        # ── Watch History ─────────────────────────────────────────────────────
+        # Watch history
         history = st.session_state.get("watch_history", [])
         if history:
             st.divider()
             st.subheader("🕓 Your Recent Picks")
-            st.caption("Movies you explored this session.")
             st.write(" · ".join(history))
-
             st.subheader("🎯 Based on Your Recent Picks")
-            st.caption("Blended recommendations from your last selections.")
-
             all_recs: List[pd.DataFrame] = []
             for h_title in history:
                 if h_title in title_to_index:
                     h_recs = recommend_from_similarity(
-                        sim_matrix=sim_matrix,
-                        movie_titles=movie_titles,
-                        movie_name=h_title,
-                        genres_map=genres_map,
-                        title_to_index=title_to_index,
-                        top_k=20,
-                        excluded_genres=excluded_frozen,
-                        mood_genres=mood_genres,
+                        sim_matrix=sim_matrix, movie_titles=movie_titles,
+                        movie_name=h_title, genres_map=genres_map,
+                        title_to_index=title_to_index, top_k=20,
+                        excluded_genres=excluded_frozen, mood_genres=set(),
                     )
                     all_recs.append(h_recs)
-
             if all_recs:
                 combined = pd.concat(all_recs)
                 combined = combined[~combined["movie"].isin(history)]
@@ -766,22 +972,51 @@ def main() -> None:
                     combined.groupby("movie", as_index=False)
                     .agg({"score": "mean", "genres": "first", "mood_match": "any"})
                     .sort_values("score", ascending=False)
-                    .head(10)
-                    .reset_index(drop=True)
+                    .head(10).reset_index(drop=True)
                 )
-                render_recommendation_cards(combined, mood_pick, avg_ratings, tmdb_key, 10)
-            else:
-                st.info("No blended recommendations yet — explore more movies.")
+                render_recommendation_cards(combined, "No preference", avg_ratings, tmdb_key, 10)
 
         st.markdown("---")
         st.write("RecoMind | Built by Smit Patel 🚀")
 
+    # ════════════════════════════════════════════════════════════
+    #  TAB 2 — ★ ENHANCED Mood Mode (fully reactive, no button)
+    # ════════════════════════════════════════════════════════════
     with tab2:
+        render_mood_tab(
+            sim_matrix=sim_matrix,
+            movie_titles=movie_titles,
+            genres_map=genres_map,
+            title_to_index=title_to_index,
+            avg_ratings=avg_ratings,
+            excluded_frozen=excluded_frozen,
+            tmdb_key=tmdb_key,
+            top_k=top_k,
+        )
+
+    # ════════════════════════════════════════════════════════════
+    #  TAB 3 — ★ ENHANCED Wellbeing Filter (fully reactive, no button)
+    # ════════════════════════════════════════════════════════════
+    with tab3:
+        render_wellbeing_tab(
+            sim_matrix=sim_matrix,
+            movie_titles=movie_titles,
+            genres_map=genres_map,
+            title_to_index=title_to_index,
+            avg_ratings=avg_ratings,
+            genre_options=genre_options,
+            tmdb_key=tmdb_key,
+            top_k=top_k,
+        )
+
+    # ════════════════════════════════════════════════════════════
+    #  TAB 4 — Dashboard  (unchanged)
+    # ════════════════════════════════════════════════════════════
+    with tab4:
         import plotly.express as px
 
         st.subheader("📊 Dataset Dashboard")
         st.caption("Analysis of the MovieLens training subset.")
-
         df_dash, _, _, _ = load_and_prepare_data(last["top_n_movies"], last["top_n_users"])
 
         st.markdown("#### ⭐ Rating Distribution")
@@ -830,7 +1065,7 @@ def main() -> None:
             fig4 = px.bar(sd, x="Sentiment", y="Count", color="Sentiment",
                           color_discrete_map={
                               "Positive 😊": "#2ecc71",
-                              "Neutral 😐": "#95a5a6",
+                              "Neutral 😐":  "#95a5a6",
                               "Negative 😟": "#e74c3c",
                           },
                           title="Emotional tone of movies in dataset")
@@ -838,8 +1073,6 @@ def main() -> None:
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#ffffff"
             )
             st.plotly_chart(fig4, use_container_width=True)
-        else:
-            st.info("No genre data for sentiment analysis.")
 
 
 if __name__ == "__main__":
