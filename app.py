@@ -75,6 +75,7 @@ GENRE_SENTIMENT_MAP: Dict[str, str] = {
     "IMAX":        "Neutral 😐",
 }
 
+# Fallback synopses when TMDB key is not set or movie not found
 MOVIE_SYNOPSES = {
     "Toy Story (1995)": "A cowboy doll is profoundly threatened and jealous when a new spaceman action figure supplants him as top toy in a boy's bedroom.",
     "Pulp Fiction (1994)": "The lives of two mob hitmen, a boxer, a gangster and his wife intertwine in four tales of violence and redemption.",
@@ -94,19 +95,14 @@ FILTERED_MOVIES_DATA_CSV_LOCAL = os.path.join(DATA_DIR, "filtered_movies_data.cs
 ML_LATEST_SMALL_URL = "https://files.grouplens.org/datasets/movielens/ml-latest-small.zip"
 ML_LATEST_SMALL_DIR = os.path.join(DATA_DIR, "ml-latest-small")
 
-# ─────────────────────────────────────────────────────────────────
-#  CSS — dark, compact, professional
-# ─────────────────────────────────────────────────────────────────
 DARK_CARD_CSS = """
 <style>
-/* ── base ── */
 .search-card{background:#0e1117;border:1px solid #2d2d2d;border-radius:10px;
   padding:1.4rem 1.6rem 1rem;margin-bottom:1.2rem}
 .search-card-title{font-size:1.25rem;font-weight:700;color:#fff;margin-bottom:.2rem}
 .search-card-sub{font-size:.82rem;color:#888;margin-bottom:1rem}
 .found-count{font-size:.9rem;font-weight:600;color:#ccc;margin:.5rem 0 .8rem}
 
-/* ── movie detail ── */
 .movie-detail-card{background:#0e1117;border:1px solid #2d2d2d;border-radius:10px;
   padding:1.2rem 1.4rem;margin-bottom:1rem}
 .movie-title-card{font-size:1.3rem;font-weight:700;color:#fff;margin-bottom:.5rem}
@@ -116,7 +112,6 @@ DARK_CARD_CSS = """
 .movie-synopsis{font-size:.88rem;color:#aaa;margin-top:.6rem;line-height:1.55;
   border-top:1px solid #2d2d2d;padding-top:.6rem}
 
-/* ── rec cards ── */
 .rec-card{background:#0e1117;border:1px solid #2d2d2d;border-radius:8px;
   padding:.9rem 1.1rem;margin-bottom:.5rem}
 .rec-title{font-size:1rem;font-weight:700;color:#fff}
@@ -125,7 +120,6 @@ DARK_CARD_CSS = """
 .mood-badge{display:inline-block;background:#1a3a2a;color:#02C39A;border-radius:4px;
   padding:1px 8px;font-size:.78rem;margin-left:6px}
 
-/* ── ENHANCED: mood / wellbeing sections ── */
 .filter-panel{background:#111827;border:1px solid #1e3a5f;border-radius:12px;
   padding:1.4rem 1.6rem;margin-bottom:1.4rem}
 .filter-panel-title{font-size:1.1rem;font-weight:700;color:#60a5fa;
@@ -139,8 +133,7 @@ DARK_CARD_CSS = """
 .wellbeing-panel-sub{font-size:.8rem;color:#6b7280;margin-bottom:1rem}
 
 .helper-msg{background:#0f1f2e;border:1px dashed #1e3a5f;border-radius:8px;
-  padding:.9rem 1.2rem;color:#4b7fa8;font-size:.9rem;text-align:center;
-  margin:1rem 0}
+  padding:.9rem 1.2rem;color:#4b7fa8;font-size:.9rem;text-align:center;margin:1rem 0}
 .active-banner{border-radius:8px;padding:.7rem 1.1rem;
   font-size:.88rem;font-weight:600;margin-bottom:.8rem}
 .mood-active{background:#0d2d1a;border:1px solid #02C39A;color:#02C39A}
@@ -155,7 +148,7 @@ DARK_CARD_CSS = """
 
 
 # ─────────────────────────────────────────────────────────────────
-#  Data helpers  (unchanged from original)
+#  Data helpers
 # ─────────────────────────────────────────────────────────────────
 def _ensure_data_downloaded() -> Tuple[str, str]:
     if os.path.exists(MOVIES_CSV_LOCAL) and os.path.exists(RATINGS_CSV_LOCAL):
@@ -238,7 +231,7 @@ def build_recommender(top_n_movies: int, top_n_users: int):
 
 
 # ─────────────────────────────────────────────────────────────────
-#  Utility helpers  (unchanged)
+#  Utility helpers
 # ─────────────────────────────────────────────────────────────────
 def extract_year_from_title(title: str) -> str:
     m = re.search(r"\((\d{4})\)\s*$", str(title))
@@ -283,8 +276,13 @@ def _tmdb_api_key() -> Optional[str]:
     except Exception:
         return None
 
+
+# ─────────────────────────────────────────────────────────────────
+#  TMDB — single cached search call powers BOTH poster + synopsis
+# ─────────────────────────────────────────────────────────────────
 @st.cache_data(ttl=86400, show_spinner=False)
-def tmdb_poster_url(api_key: str, clean_title: str, year_str: str) -> Optional[str]:
+def tmdb_search_result(api_key: str, clean_title: str, year_str: str) -> Optional[dict]:
+    """One TMDB search → returns first result dict (poster_path + overview inside)."""
     if not api_key or not clean_title:
         return None
     params: Dict[str, str] = {"api_key": api_key, "query": clean_title}
@@ -298,19 +296,33 @@ def tmdb_poster_url(api_key: str, clean_title: str, year_str: str) -> Optional[s
         if r.status_code != 200:
             return None
         results = (r.json() or {}).get("results") or []
-        if not results:
-            return None
-        path = results[0].get("poster_path")
-        return f"https://image.tmdb.org/t/p/w342{path}" if path else None
+        return results[0] if results else None
     except requests.RequestException:
         return None
+
+
+def tmdb_poster_url(api_key: str, clean_title: str, year_str: str) -> Optional[str]:
+    result = tmdb_search_result(api_key, clean_title, year_str)
+    if not result:
+        return None
+    path = result.get("poster_path")
+    return f"https://image.tmdb.org/t/p/w342{path}" if path else None
+
+
+def tmdb_synopsis(api_key: str, clean_title: str, year_str: str) -> Optional[str]:
+    """Return movie overview from TMDB — same cached call as poster, no extra request."""
+    result = tmdb_search_result(api_key, clean_title, year_str)
+    if not result:
+        return None
+    overview = (result.get("overview") or "").strip()
+    return overview if overview else None
+
 
 def get_poster_url(api_key: Optional[str], full_title: str) -> Optional[str]:
     if not api_key:
         return None
     y = extract_year_from_title(full_title)
-    return tmdb_poster_url(api_key, clean_title_for_tmdb(full_title),
-                           y if y != "—" else "")
+    return tmdb_poster_url(api_key, clean_title_for_tmdb(full_title), y if y != "—" else "")
 
 def show_poster_for_title(api_key: Optional[str], full_title: str,
                            caption: Optional[str] = None) -> None:
@@ -322,7 +334,7 @@ def show_poster_for_title(api_key: Optional[str], full_title: str,
 
 
 # ─────────────────────────────────────────────────────────────────
-#  Core CF logic  (unchanged — no modifications to algorithm)
+#  Core CF logic
 # ─────────────────────────────────────────────────────────────────
 def recommend_from_similarity(
     sim_matrix: np.ndarray,
@@ -360,8 +372,7 @@ def recommend_from_similarity(
         scanned += 1
         if scanned > max_scan:
             break
-        if movie_matches_excluded_genres(genres_map.get(movie_titles[i], ""),
-                                         excluded_genres):
+        if movie_matches_excluded_genres(genres_map.get(movie_titles[i], ""), excluded_genres):
             continue
         picked_idx.append(i)
         if len(picked_idx) >= top_k:
@@ -382,7 +393,7 @@ def recommend_from_similarity(
 
 
 # ─────────────────────────────────────────────────────────────────
-#  Shared render helper
+#  Render helpers
 # ─────────────────────────────────────────────────────────────────
 def render_recommendation_cards(
     recs: pd.DataFrame,
@@ -439,11 +450,18 @@ def render_movie_detail_card(
     avg_rating: Optional[float],
     api_key: Optional[str],
 ) -> None:
-    year          = extract_year_from_title(full_title)
-    clean         = clean_title_for_tmdb(full_title)
+    year           = extract_year_from_title(full_title)
+    clean          = clean_title_for_tmdb(full_title)
     genres_display = genres_str.replace("|", ", ") if genres_str and genres_str != "—" else "—"
-    synopsis      = MOVIE_SYNOPSES.get(full_title, MOVIE_SYNOPSES["default"])
     rating_display = f"⭐ {avg_rating}" if avg_rating else "—"
+
+    # ── Synopsis: TMDB first, hardcoded fallback, generic last ────
+    synopsis: Optional[str] = None
+    if api_key:
+        y = extract_year_from_title(full_title)
+        synopsis = tmdb_synopsis(api_key, clean, y if y != "—" else "")
+    if not synopsis:
+        synopsis = MOVIE_SYNOPSES.get(full_title, MOVIE_SYNOPSES["default"])
 
     poster_col, info_col = st.columns([1, 2.8])
     with poster_col:
@@ -471,17 +489,11 @@ def render_movie_detail_card(
 
 
 # ─────────────────────────────────────────────────────────────────
-#  ★ NEW — Reactive Mood Mode tab
+#  Mood Mode tab
 # ─────────────────────────────────────────────────────────────────
 def render_mood_tab(
-    sim_matrix: np.ndarray,
-    movie_titles: pd.Index,
-    genres_map: Dict[str, str],
-    title_to_index: Dict[str, int],
-    avg_ratings: Dict[str, float],
-    excluded_frozen: FrozenSet[str],
-    tmdb_key: Optional[str],
-    top_k: int,
+    sim_matrix, movie_titles, genres_map, title_to_index,
+    avg_ratings, excluded_frozen, tmdb_key, top_k,
 ) -> None:
     st.markdown(
         "<div class='filter-panel'>"
@@ -492,7 +504,6 @@ def render_mood_tab(
         unsafe_allow_html=True,
     )
 
-    # ── Movie picker (required anchor for CF) ─────────────────────
     all_titles = sorted(movie_titles.tolist())
     if excluded_frozen:
         all_titles = [
@@ -502,16 +513,13 @@ def render_mood_tab(
 
     anchor_movie = st.selectbox(
         "📽️ Start from a movie you like",
-        options=all_titles,
-        index=None,
+        options=all_titles, index=None,
         placeholder="Search or select a movie…",
         key="mood_anchor",
     )
 
-    # ── Mood selector — reactive ──────────────────────────────────
     mood_options = list(MOOD_GENRE_MAP.keys())
-    cols_mood = st.columns(len(mood_options))
-    # Use session_state to track selected mood without a button
+    cols_mood    = st.columns(len(mood_options))
     if "selected_mood" not in st.session_state:
         st.session_state["selected_mood"] = None
 
@@ -520,18 +528,13 @@ def render_mood_tab(
             is_active = st.session_state["selected_mood"] == mood
             label     = f"{'✅ ' if is_active else ''}{mood}"
             if st.button(label, key=f"mood_btn_{i}", use_container_width=True):
-                # Toggle: click same mood again to deselect
-                if st.session_state["selected_mood"] == mood:
-                    st.session_state["selected_mood"] = None
-                else:
-                    st.session_state["selected_mood"] = mood
+                st.session_state["selected_mood"] = None if st.session_state["selected_mood"] == mood else mood
 
-    selected_mood  = st.session_state["selected_mood"]
-    mood_genres    = MOOD_GENRE_MAP.get(selected_mood, set()) if selected_mood else set()
+    selected_mood = st.session_state["selected_mood"]
+    mood_genres   = MOOD_GENRE_MAP.get(selected_mood, set()) if selected_mood else set()
 
     st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
 
-    # ── Active filter banner ──────────────────────────────────────
     has_mood     = selected_mood is not None
     has_excluded = bool(excluded_frozen)
 
@@ -539,39 +542,30 @@ def render_mood_tab(
         st.markdown(
             f"<div class='active-banner both-active'>"
             f"🎭 Mood: <b>{selected_mood}</b> &nbsp;+&nbsp; "
-            f"🚫 Excluding: <b>{', '.join(sorted(excluded_frozen))}</b> — "
-            f"both filters active, results update automatically."
-            f"</div>",
-            unsafe_allow_html=True,
+            f"🚫 Excluding: <b>{', '.join(sorted(excluded_frozen))}</b> — both filters active."
+            f"</div>", unsafe_allow_html=True,
         )
     elif has_mood:
-        mood_genre_labels = ", ".join(sorted(mood_genres))
         st.markdown(
             f"<div class='active-banner mood-active'>"
-            f"🎭 Mood: <b>{selected_mood}</b> — boosting genres: {mood_genre_labels}"
-            f"</div>",
-            unsafe_allow_html=True,
+            f"🎭 Mood: <b>{selected_mood}</b> — boosting genres: {', '.join(sorted(mood_genres))}"
+            f"</div>", unsafe_allow_html=True,
         )
     elif has_excluded:
         st.markdown(
             f"<div class='active-banner well-active'>"
             f"🚫 Wellbeing filter active — excluding: <b>{', '.join(sorted(excluded_frozen))}</b>"
-            f"</div>",
-            unsafe_allow_html=True,
+            f"</div>", unsafe_allow_html=True,
         )
 
-    # ── Guard: nothing selected yet ───────────────────────────────
     if not anchor_movie and not has_mood:
         st.markdown(
             "<div class='helper-msg'>"
             "💡 Select a mood above or pick a starting movie to see personalised recommendations."
-            "</div>",
-            unsafe_allow_html=True,
+            "</div>", unsafe_allow_html=True,
         )
         return
 
-    # ── Auto-generate recommendations reactively ──────────────────
-    # If no anchor movie but mood selected → pick top-rated movie in mood genres as anchor
     if not anchor_movie and has_mood:
         mood_titles = [
             t for t in movie_titles
@@ -579,69 +573,49 @@ def render_mood_tab(
             and not movie_matches_excluded_genres(genres_map.get(t, ""), excluded_frozen)
         ]
         if not mood_titles:
-            st.warning("No movies found for this mood with the current exclusions. Try changing the Wellbeing filter.")
+            st.warning("No movies found for this mood with the current exclusions.")
             return
-        # Pick the one with highest avg rating as anchor
-        anchor_movie = max(
-            mood_titles,
-            key=lambda t: avg_ratings.get(t, 0.0),
-        )
+        anchor_movie = max(mood_titles, key=lambda t: avg_ratings.get(t, 0.0))
         st.caption(f"🔍 Auto-selected anchor: **{clean_title_for_tmdb(anchor_movie)}** (top-rated in mood genre)")
 
     with st.spinner("Finding mood-matched movies…"):
         recs = recommend_from_similarity(
-            sim_matrix=sim_matrix,
-            movie_titles=movie_titles,
-            genres_map=genres_map,
-            title_to_index=title_to_index,
-            movie_name=anchor_movie,
-            top_k=top_k,
-            excluded_genres=excluded_frozen,
-            mood_genres=mood_genres,
+            sim_matrix=sim_matrix, movie_titles=movie_titles,
+            genres_map=genres_map, title_to_index=title_to_index,
+            movie_name=anchor_movie, top_k=top_k,
+            excluded_genres=excluded_frozen, mood_genres=mood_genres,
         )
 
     if recs.empty:
         st.warning("No results with these filters. Try a different mood or fewer exclusions.")
         return
 
-    render_recommendation_cards(recs, selected_mood or "No preference",
-                                 avg_ratings, tmdb_key, top_k)
+    render_recommendation_cards(recs, selected_mood or "No preference", avg_ratings, tmdb_key, top_k)
 
 
 # ─────────────────────────────────────────────────────────────────
-#  ★ NEW — Reactive Wellbeing Filter tab
+#  Wellbeing Filter tab
 # ─────────────────────────────────────────────────────────────────
 def render_wellbeing_tab(
-    sim_matrix: np.ndarray,
-    movie_titles: pd.Index,
-    genres_map: Dict[str, str],
-    title_to_index: Dict[str, int],
-    avg_ratings: Dict[str, float],
-    genre_options: List[str],
-    tmdb_key: Optional[str],
-    top_k: int,
+    sim_matrix, movie_titles, genres_map, title_to_index,
+    avg_ratings, genre_options, tmdb_key, top_k,
 ) -> None:
     st.markdown(
         "<div class='wellbeing-panel'>"
         "<div class='wellbeing-panel-title'>🛡️ Wellbeing Filter</div>"
         "<div class='wellbeing-panel-sub'>"
-        "Exclude genres you'd rather avoid — recommendations refresh automatically the moment you change your selection."
+        "Exclude genres you'd rather avoid — recommendations refresh automatically."
         "</div></div>",
         unsafe_allow_html=True,
     )
 
-    # ── Genre exclusion — fully reactive (no button) ──────────────
     wb_excluded = st.multiselect(
-        "🚫 Genres to exclude",
-        options=genre_options,
-        default=[],
-        placeholder="Choose genres to block…",
-        key="wb_excluded",
+        "🚫 Genres to exclude", options=genre_options, default=[],
+        placeholder="Choose genres to block…", key="wb_excluded",
         help="Results update instantly as you add or remove genres.",
     )
     wb_frozen = frozenset(wb_excluded)
 
-    # ── Movie picker ──────────────────────────────────────────────
     all_titles_wb = sorted(movie_titles.tolist())
     if wb_frozen:
         all_titles_wb = [
@@ -651,74 +625,57 @@ def render_wellbeing_tab(
 
     anchor_wb = st.selectbox(
         "📽️ Pick a movie to base recommendations on",
-        options=all_titles_wb,
-        index=None,
-        placeholder="Search or select…",
-        key="wb_anchor",
+        options=all_titles_wb, index=None,
+        placeholder="Search or select…", key="wb_anchor",
     )
 
     st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
 
-    # ── Active filter status ──────────────────────────────────────
     if wb_excluded:
-        excluded_str = ", ".join(f"**{g}**" for g in sorted(wb_excluded))
         st.markdown(
             f"<div class='active-banner well-active'>"
             f"🚫 Blocking: {', '.join(sorted(wb_excluded))} — "
             f"these genres are completely removed from results."
-            f"</div>",
-            unsafe_allow_html=True,
+            f"</div>", unsafe_allow_html=True,
         )
     else:
         st.markdown(
             "<div class='helper-msg'>"
-            "💡 No genres excluded yet. Select genres above to filter them out, "
-            "or just pick a movie to get standard recommendations."
-            "</div>",
-            unsafe_allow_html=True,
+            "💡 No genres excluded yet. Select genres above to filter them out."
+            "</div>", unsafe_allow_html=True,
         )
 
-    # ── Guard ─────────────────────────────────────────────────────
     if not anchor_wb:
         st.markdown(
             "<div class='helper-msg'>"
             "👆 Select a starting movie above to see filtered recommendations."
-            "</div>",
-            unsafe_allow_html=True,
+            "</div>", unsafe_allow_html=True,
         )
         return
 
-    # ── Auto-run — no button ──────────────────────────────────────
     with st.spinner("Applying wellbeing filter and generating recommendations…"):
         recs_wb = recommend_from_similarity(
-            sim_matrix=sim_matrix,
-            movie_titles=movie_titles,
-            genres_map=genres_map,
-            title_to_index=title_to_index,
-            movie_name=anchor_wb,
-            top_k=top_k,
-            excluded_genres=wb_frozen,
-            mood_genres=set(),
+            sim_matrix=sim_matrix, movie_titles=movie_titles,
+            genres_map=genres_map, title_to_index=title_to_index,
+            movie_name=anchor_wb, top_k=top_k,
+            excluded_genres=wb_frozen, mood_genres=set(),
         )
 
     if recs_wb.empty:
         st.warning("No recommendations left after exclusions. Try removing some blocked genres.")
         return
 
-    # ── Stats bar ─────────────────────────────────────────────────
-    total_before = top_k + 20  # approximate scan window
-    total_after  = len(recs_wb)
     if wb_excluded:
         st.caption(
-            f"✅ Showing **{total_after}** clean recommendations — "
-            f"all results are free of: {', '.join(sorted(wb_excluded))}."
+            f"✅ Showing **{len(recs_wb)}** clean recommendations — "
+            f"all free of: {', '.join(sorted(wb_excluded))}."
         )
 
     render_recommendation_cards(recs_wb, "No preference", avg_ratings, tmdb_key, top_k)
 
 
 # ─────────────────────────────────────────────────────────────────
-#  Main app
+#  Main
 # ─────────────────────────────────────────────────────────────────
 def main() -> None:
     st.set_page_config(page_title="RecoMind", page_icon="🎬", layout="wide")
@@ -726,7 +683,6 @@ def main() -> None:
     st.title("🎬 RecoMind — Movie Recommendations")
     st.caption("Collaborative filtering · Cosine similarity · TextBlob NLP")
 
-    # ── Sidebar ───────────────────────────────────────────────────
     with st.sidebar:
         st.header("⚙️ Settings")
         with st.form("train_form"):
@@ -742,20 +698,17 @@ def main() -> None:
             "top_n_movies": top_n_movies, "top_n_users": top_n_users
         }
 
-    last = st.session_state.get("last_built_params",
-                                 {"top_n_movies": 100, "top_n_users": 500})
+    last = st.session_state.get("last_built_params", {"top_n_movies": 100, "top_n_users": 500})
 
     with st.spinner("Building model…"):
         sim_matrix, genres_map, movie_titles, title_to_index = build_recommender(
-            top_n_movies=last["top_n_movies"],
-            top_n_users=last["top_n_users"],
+            top_n_movies=last["top_n_movies"], top_n_users=last["top_n_users"],
         )
 
     avg_ratings   = compute_avg_ratings(last["top_n_movies"], last["top_n_users"])
     genre_options = collect_genre_options(genres_map)
     tmdb_key      = _tmdb_api_key()
 
-    # ── Global sidebar filters ────────────────────────────────────
     with st.sidebar:
         st.divider()
         st.subheader("🚫 Global Wellbeing Filter")
@@ -769,11 +722,10 @@ def main() -> None:
         st.divider()
         st.subheader("🖼️ TMDB Posters")
         if tmdb_key:
-            st.success("API key found — posters enabled.")
+            st.success("API key found — posters + synopses enabled.")
         else:
-            st.warning("Set `TMDB_API_KEY` in secrets.")
+            st.warning("Set `TMDB_API_KEY` in secrets for posters and live synopses.")
 
-    # ── Tabs ──────────────────────────────────────────────────────
     tab1, tab2, tab3, tab4 = st.tabs([
         "🎬 Search & Recommendations",
         "🎭 Mood Mode",
@@ -781,17 +733,15 @@ def main() -> None:
         "📊 Dashboard",
     ])
 
-    # ════════════════════════════════════════════════════════════
-    #  TAB 1 — Search & Recommendations  (original logic preserved)
-    # ════════════════════════════════════════════════════════════
+    # ── Tab 1 ─────────────────────────────────────────────────────
     with tab1:
         import plotly.express as px
 
         df_ratings, _, _, _ = load_and_prepare_data(last["top_n_movies"], last["top_n_users"])
         top_counts = df_ratings["title"].value_counts().head(10)
         trending = pd.DataFrame({
-            "Movie":              top_counts.index,
-            "Ratings in subset":  top_counts.values.astype(int),
+            "Movie":             top_counts.index,
+            "Ratings in subset": top_counts.values.astype(int),
         })
         trending["Year"]   = trending["Movie"].map(extract_year_from_title)
         trending["Genres"] = trending["Movie"].map(lambda t: genres_map.get(t, "—"))
@@ -866,7 +816,6 @@ def main() -> None:
         else:
             st.info("Search and select a movie above, then press **Recommend**.")
 
-        # Sentiment analysis
         if selected_movie:
             st.divider()
             st.subheader("🎭 Audience Sentiment Analysis")
@@ -918,21 +867,16 @@ def main() -> None:
                 ul = "Positive 😊" if up > 0.05 else ("Negative 😟" if up < -0.05 else "Neutral 😐")
                 st.success(f"**Your review sentiment:** {ul} (Polarity: {up:.3f})")
 
-        # Recommend button (Tab 1 only — keeps original UX for main search tab)
         st.divider()
         st.subheader("🎯 Top Recommendations")
         if st.button("Recommend", type="primary"):
             if selected_movie:
                 with st.spinner("Generating recommendations…"):
                     recs = recommend_from_similarity(
-                        sim_matrix=sim_matrix,
-                        movie_titles=movie_titles,
-                        movie_name=selected_movie,
-                        genres_map=genres_map,
-                        title_to_index=title_to_index,
-                        top_k=top_k,
-                        excluded_genres=excluded_frozen,
-                        mood_genres=set(),
+                        sim_matrix=sim_matrix, movie_titles=movie_titles,
+                        movie_name=selected_movie, genres_map=genres_map,
+                        title_to_index=title_to_index, top_k=top_k,
+                        excluded_genres=excluded_frozen, mood_genres=set(),
                     )
                 history: List[str] = st.session_state["watch_history"]
                 if selected_movie not in history:
@@ -948,7 +892,6 @@ def main() -> None:
             else:
                 st.warning("Please select a movie first.")
 
-        # Watch history
         history = st.session_state.get("watch_history", [])
         if history:
             st.divider()
@@ -979,39 +922,25 @@ def main() -> None:
         st.markdown("---")
         st.write("RecoMind | Built by Smit Patel 🚀")
 
-    # ════════════════════════════════════════════════════════════
-    #  TAB 2 — ★ ENHANCED Mood Mode (fully reactive, no button)
-    # ════════════════════════════════════════════════════════════
+    # ── Tab 2 ─────────────────────────────────────────────────────
     with tab2:
         render_mood_tab(
-            sim_matrix=sim_matrix,
-            movie_titles=movie_titles,
-            genres_map=genres_map,
-            title_to_index=title_to_index,
-            avg_ratings=avg_ratings,
-            excluded_frozen=excluded_frozen,
-            tmdb_key=tmdb_key,
-            top_k=top_k,
+            sim_matrix=sim_matrix, movie_titles=movie_titles,
+            genres_map=genres_map, title_to_index=title_to_index,
+            avg_ratings=avg_ratings, excluded_frozen=excluded_frozen,
+            tmdb_key=tmdb_key, top_k=top_k,
         )
 
-    # ════════════════════════════════════════════════════════════
-    #  TAB 3 — ★ ENHANCED Wellbeing Filter (fully reactive, no button)
-    # ════════════════════════════════════════════════════════════
+    # ── Tab 3 ─────────────────────────────────────────────────────
     with tab3:
         render_wellbeing_tab(
-            sim_matrix=sim_matrix,
-            movie_titles=movie_titles,
-            genres_map=genres_map,
-            title_to_index=title_to_index,
-            avg_ratings=avg_ratings,
-            genre_options=genre_options,
-            tmdb_key=tmdb_key,
-            top_k=top_k,
+            sim_matrix=sim_matrix, movie_titles=movie_titles,
+            genres_map=genres_map, title_to_index=title_to_index,
+            avg_ratings=avg_ratings, genre_options=genre_options,
+            tmdb_key=tmdb_key, top_k=top_k,
         )
 
-    # ════════════════════════════════════════════════════════════
-    #  TAB 4 — Dashboard  (unchanged)
-    # ════════════════════════════════════════════════════════════
+    # ── Tab 4 ─────────────────────────────────────────────────────
     with tab4:
         import plotly.express as px
 
