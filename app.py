@@ -1,13 +1,16 @@
+import html
 import os
 import re
 import sqlite3
 import zipfile
+import urllib.error
 import urllib.request
 from typing import Dict, FrozenSet, List, Optional, Set, Tuple
 
 import bcrypt
 import numpy as np
 import pandas as pd
+from pandas.errors import EmptyDataError, ParserError
 import requests
 import streamlit as st
 
@@ -82,6 +85,18 @@ FILTERED_MOVIES_DATA_CSV_LOCAL = os.path.join(DATA_DIR, "filtered_movies_data.cs
 ML_LATEST_SMALL_URL = "https://files.grouplens.org/datasets/movielens/ml-latest-small.zip"
 ML_LATEST_SMALL_DIR = os.path.join(DATA_DIR, "ml-latest-small")
 
+_POSTER_FALLBACK_HTML = (
+    "<div style='background:#0d1117;border:1px solid #1f2937;border-radius:8px;"
+    "height:200px;display:flex;align-items:center;justify-content:center;"
+    "color:#374151;font-size:2.5rem;'>🎬</div>"
+)
+
+MOVIELENS_MOVIE_COLS = frozenset({"movieId", "title", "genres"})
+MOVIELENS_RATING_COLS = frozenset({"userId", "movieId", "rating"})
+
+USERNAME_PATTERN = re.compile(r"^[a-zA-Z0-9_]{3,32}$")
+COLD_START_GENRE_OPTIONS = sorted(GENRE_SENTIMENT_MAP.keys())
+
 # ─────────────────────────────────────────────────────────────────
 #  CSS — Dark cinematic theme with DM Sans + Space Mono
 # ─────────────────────────────────────────────────────────────────
@@ -90,6 +105,24 @@ DARK_CARD_CSS = """
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Space+Mono:wght@400;700&display=swap');
 
 html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
+
+[data-testid="stImage"] img {
+  transition: transform 0.2s ease;
+}
+[data-testid="stImage"] img:hover {
+  transform: scale(1.03);
+}
+
+.top-nav-stats {
+  display: flex; justify-content: center; align-items: center;
+  gap: 1.75rem; flex-wrap: wrap;
+  padding: .65rem 1.1rem; margin: 0 0 .85rem;
+  background: linear-gradient(180deg, #111827 0%, #0f172a 100%);
+  border: 1px solid #1f2937; border-radius: 10px;
+  font-size: .82rem; color: #94a3b8;
+}
+.top-nav-stats strong { color: #e2e8f0; font-weight: 700; }
+.top-nav-stats span { white-space: nowrap; }
 
 .control-panel {
   background: linear-gradient(135deg, #0d1117 0%, #111827 100%);
@@ -158,6 +191,11 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
   padding: 1px 7px; display: inline-block; margin-top: .3rem;
 }
 .rec-synopsis { font-size: .81rem; color: #6b7280; margin-top: .45rem; line-height: 1.55; }
+.rec-explain {
+  font-size: .78rem; color: #94a3b8; margin-top: .55rem; line-height: 1.55;
+  border-left: 3px solid #4f46e5; padding: .45rem .65rem; background: #0c1220;
+  border-radius: 0 8px 8px 0;
+}
 
 .why-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: .5rem; }
 .why-tag {
@@ -298,6 +336,36 @@ def _init_auth_db() -> None:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        for col_sql in (
+            "ALTER TABLE users ADD COLUMN favorite_genres TEXT",
+            "ALTER TABLE users ADD COLUMN favorite_movie_hint TEXT",
+            "ALTER TABLE users ADD COLUMN onboarding_mood TEXT",
+        ):
+            try:
+                conn.execute(col_sql)
+            except sqlite3.OperationalError:
+                pass
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS watch_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                movie_title TEXT NOT NULL,
+                watched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_watch_user_time ON watch_history(username, watched_at)"
+        )
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS rec_feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                movie_title TEXT NOT NULL,
+                anchor_title TEXT,
+                sentiment TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
 
 
 def _validate_password_strength(password: str) -> Optional[str]:
@@ -311,37 +379,128 @@ def _validate_password_strength(password: str) -> Optional[str]:
     return None
 
 
-def _signup(username: str, password: str, confirm: str) -> tuple:
-    if len(username.strip()) < 3:
-        return False, "Username must be at least 3 characters."
+def _validate_username_str(username: str) -> Optional[str]:
+    u = username.strip()
+    if len(u) < 3:
+        return "Username must be at least 3 characters."
+    if not USERNAME_PATTERN.match(u):
+        return "Use 3–32 characters: letters, digits, or underscore only."
+    return None
+
+
+def _signup(
+    username: str,
+    password: str,
+    confirm: str,
+    favorite_genres: Optional[List[str]] = None,
+    favorite_movie_hint: str = "",
+    onboarding_mood: str = "",
+) -> tuple:
+    err = _validate_username_str(username)
+    if err:
+        return False, err
     if password != confirm:
         return False, "Passwords do not match."
+    if "\x00" in password:
+        return False, "Password contains invalid characters."
     err = _validate_password_strength(password)
     if err:
         return False, err
     hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    fg = "|".join(favorite_genres) if favorite_genres else None
+    fm = favorite_movie_hint.strip()[:180] or None
+    om = (onboarding_mood or "").strip() or None
+    if om == "—":
+        om = None
     try:
         with _db_connect() as conn:
             conn.execute(
-                "INSERT INTO users (username, password_hash) VALUES (?, ?)",
-                (username.strip().lower(), hashed),
+                """
+                INSERT INTO users (username, password_hash, favorite_genres, favorite_movie_hint, onboarding_mood)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (username.strip().lower(), hashed, fg, fm, om),
             )
         return True, "Account created successfully."
     except sqlite3.IntegrityError:
         return False, "Username already taken — please choose another."
+    except sqlite3.Error as e:
+        return False, f"Database error while creating account: {e}"
 
 
 def _login(username: str, password: str) -> tuple:
-    with _db_connect() as conn:
-        row = conn.execute(
-            "SELECT password_hash FROM users WHERE username = ?",
-            (username.strip().lower(),),
-        ).fetchone()
+    err = _validate_username_str(username)
+    if err:
+        return False, err
+    try:
+        with _db_connect() as conn:
+            row = conn.execute(
+                "SELECT password_hash FROM users WHERE username = ?",
+                (username.strip().lower(),),
+            ).fetchone()
+    except sqlite3.Error as e:
+        return False, f"Could not read user database: {e}"
     if not row:
         return False, "Username not found."
-    if bcrypt.checkpw(password.encode(), row[0].encode()):
+    try:
+        ok = bcrypt.checkpw(password.encode(), row[0].encode())
+    except ValueError:
+        return False, "Account data is invalid — please sign up again or use another account."
+    if ok:
         return True, "Login successful."
     return False, "Incorrect password."
+
+
+def watch_history_list(username: str, limit: int = 40) -> List[str]:
+    if username == "guest":
+        return []
+    try:
+        with _db_connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT movie_title FROM watch_history
+                WHERE username = ? ORDER BY watched_at DESC LIMIT ?
+                """,
+                (username.strip().lower(), limit),
+            ).fetchall()
+    except sqlite3.Error:
+        return []
+    seen: Set[str] = set()
+    out: List[str] = []
+    for (t,) in rows:
+        if t and t not in seen:
+            seen.add(t)
+            out.append(t)
+    return out[:5]
+
+
+def watch_history_push(username: str, movie_title: str) -> None:
+    if username == "guest" or not movie_title:
+        return
+    try:
+        with _db_connect() as conn:
+            conn.execute(
+                "INSERT INTO watch_history (username, movie_title) VALUES (?, ?)",
+                (username.strip().lower(), movie_title),
+            )
+    except sqlite3.Error:
+        pass
+
+
+def rec_feedback_push(username: str, movie_title: str, anchor_title: str, sentiment: str) -> None:
+    if username == "guest" or not movie_title or not sentiment:
+        return
+    try:
+        with _db_connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO rec_feedback (username, movie_title, anchor_title, sentiment)
+                VALUES (?, ?, ?, ?)
+                """,
+                (username.strip().lower(), movie_title, anchor_title or "", sentiment),
+            )
+    except sqlite3.Error:
+        pass
 
 
 def render_auth_screen() -> bool:
@@ -351,12 +510,20 @@ def render_auth_screen() -> bool:
     if st.session_state.get("logged_in"):
         return True
 
-    # Centered auth container CSS
     st.markdown("""
     <style>
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
+    }
+
+    .main > div {
+        padding-top: 0rem;
+    }
+
     .auth-container {
         max-width: 520px;
-        margin: 60px auto;
+        margin: 80px auto 0 auto !important;
         padding: 2rem 2rem 1.5rem;
         background: #0d1117;
         border: 1px solid #1f2937;
@@ -375,6 +542,13 @@ def render_auth_screen() -> bool:
     div[data-baseweb="tab-list"] {
         justify-content: center;
     }
+
+    .auth-container .stCaption {
+        text-align: center;
+        display: block;
+        margin: -0.75rem 0 1.25rem;
+        color: #64748b !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -385,11 +559,13 @@ def render_auth_screen() -> bool:
         "<div class='auth-title'>🎬 RecoMind</div>",
         unsafe_allow_html=True
     )
+    st.caption("AI-powered emotional movie recommendation system")
 
     tab_login, tab_signup = st.tabs(["Login", "Sign Up"])
 
     with tab_login:
         uname = st.text_input("Username", key="login_user")
+        st.caption("Registered usernames: letters, digits, underscore · 3–32 characters.")
         pwd = st.text_input("Password", type="password", key="login_pwd")
 
         col_login, col_guest = st.columns(2)
@@ -413,6 +589,7 @@ def render_auth_screen() -> bool:
 
     with tab_signup:
         new_user = st.text_input("Choose Username", key="signup_user")
+        st.caption("3–32 characters: letters, digits, or underscore only (example: smit_patel).")
 
         new_pwd = st.text_input(
             "Choose Password (min 8 chars, 1 uppercase, 1 number)",
@@ -426,8 +603,29 @@ def render_auth_screen() -> bool:
             key="signup_confirm"
         )
 
+        st.markdown("**Cold start profile (optional)**")
+        st.caption("Helps mitigate the new-user cold-start problem before you have watch history.")
+        fav_gen = st.multiselect(
+            "Favourite genres", COLD_START_GENRE_OPTIONS, key="signup_fav_gen"
+        )
+        fav_movie = st.text_input(
+            "A favourite movie (partial title is OK)", key="signup_fav_movie", max_chars=180
+        )
+        mood_pre = st.selectbox(
+            "Preferred mood vibe",
+            ["—"] + list(MOOD_GENRE_MAP.keys()),
+            key="signup_mood",
+        )
+
         if st.button("Create Account", use_container_width=True):
-            ok, msg = _signup(new_user, new_pwd, confirm_pwd)
+            ok, msg = _signup(
+                new_user,
+                new_pwd,
+                confirm_pwd,
+                fav_gen or None,
+                fav_movie,
+                mood_pre,
+            )
 
             if ok:
                 st.success(msg + " Please log in.")
@@ -450,13 +648,42 @@ def _ensure_data_downloaded() -> Tuple[str, str]:
     if os.path.exists(em) and os.path.exists(er):
         return em, er
     zp = os.path.join(DATA_DIR, "ml-latest-small.zip")
-    with st.spinner("Downloading MovieLens dataset…"):
-        urllib.request.urlretrieve(ML_LATEST_SMALL_URL, zp)
-    with zipfile.ZipFile(zp, "r") as zf:
-        zf.extractall(DATA_DIR)
+    try:
+        with st.spinner("Downloading MovieLens dataset…"):
+            urllib.request.urlretrieve(ML_LATEST_SMALL_URL, zp)
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"MovieLens download failed (HTTP {e.code}). Check your connection.") from e
+    except urllib.error.URLError as e:
+        raise RuntimeError(
+            "MovieLens download failed (no network or DNS error). "
+            "Connect to the internet or place movies.csv and ratings.csv under Data/MovieLens/."
+        ) from e
+    except OSError as e:
+        raise RuntimeError(f"MovieLens download failed (disk error): {e}") from e
+
+    try:
+        with zipfile.ZipFile(zp, "r") as zf:
+            zf.extractall(DATA_DIR)
+    except zipfile.BadZipFile as e:
+        raise RuntimeError(
+            "Downloaded MovieLens archive is corrupted or not a zip file. Delete ml-latest-small.zip and retry."
+        ) from e
+    except OSError as e:
+        raise RuntimeError(f"Could not extract MovieLens archive: {e}") from e
+
     if not (os.path.exists(em) and os.path.exists(er)):
-        raise FileNotFoundError("Download complete but CSVs not found.")
+        raise FileNotFoundError("Download finished but movies.csv / ratings.csv were not found in the archive.")
     return em, er
+
+
+def _read_csv_checked(path: str, label: str) -> pd.DataFrame:
+    try:
+        df = pd.read_csv(path)
+    except (ParserError, EmptyDataError) as e:
+        raise ValueError(f"{label}: CSV is empty or could not be parsed ({path}): {e}") from e
+    except (OSError, UnicodeDecodeError) as e:
+        raise ValueError(f"{label}: could not read file ({path}): {e}") from e
+    return df
 
 
 @st.cache_data(show_spinner=False)
@@ -467,44 +694,104 @@ def load_and_prepare_data(top_n_movies: int, top_n_users: int):
     elif os.path.exists(FILTERED_DATA_CSV_LOCAL):
         fs = FILTERED_DATA_CSV_LOCAL
     if fs is not None:
-        df = pd.read_csv(fs)
-        if not {"userId", "title", "rating"}.issubset(df.columns):
-            raise ValueError("Filtered CSV missing required columns.")
+        df = _read_csv_checked(fs, "Filtered dataset")
+        need = {"userId", "title", "rating"}
+        missing = need - set(df.columns)
+        if missing:
+            raise ValueError(
+                f"Filtered CSV is missing required columns {sorted(missing)}. "
+                f"Found columns: {list(df.columns)}. Path: {fs}"
+            )
+        if df.empty:
+            raise ValueError(f"Filtered dataset is empty ({fs}).")
         gmap = (df[["title", "genres"]].drop_duplicates("title")
                 .set_index("title")["genres"].to_dict()) if "genres" in df.columns else {}
-        umm = df.pivot_table(index="userId", columns="title",
-                             values="rating", aggfunc="mean").fillna(0)
+        try:
+            umm = df.pivot_table(index="userId", columns="title",
+                                 values="rating", aggfunc="mean").fillna(0)
+        except (KeyError, ValueError) as e:
+            raise ValueError(f"Could not build user–movie matrix from filtered data: {e}") from e
         return df, df[["title"]].drop_duplicates(), umm, gmap
 
     mp, rp = _ensure_data_downloaded()
-    movies  = pd.read_csv(mp)
-    ratings = pd.read_csv(rp)
-    df = pd.merge(ratings, movies, on="movieId")
+    movies = _read_csv_checked(mp, "movies.csv")
+    ratings = _read_csv_checked(rp, "ratings.csv")
+    m_miss = MOVIELENS_MOVIE_COLS - set(movies.columns)
+    r_miss = MOVIELENS_RATING_COLS - set(ratings.columns)
+    if m_miss:
+        raise ValueError(
+            f"movies.csv missing columns {sorted(m_miss)}. Found: {list(movies.columns)}"
+        )
+    if r_miss:
+        raise ValueError(
+            f"ratings.csv missing columns {sorted(r_miss)}. Found: {list(ratings.columns)}"
+        )
+
+    try:
+        df = pd.merge(ratings, movies, on="movieId", how="inner")
+    except KeyError as e:
+        raise ValueError(f"Could not merge ratings and movies on movieId: {e}") from e
+
     df.dropna(inplace=True)
-    df = df[df["title"].isin(df["title"].value_counts().head(top_n_movies).index)]
-    df = df[df["userId"].isin(df["userId"].value_counts().head(top_n_users).index)]
-    gmap = movies[["title", "genres"]].drop_duplicates("title").set_index("title")["genres"].to_dict()
-    umm  = df.pivot_table(index="userId", columns="title",
-                          values="rating", aggfunc="mean").fillna(0)
+    if df.empty:
+        raise ValueError("Merged MovieLens data is empty after removing null rows.")
+
+    try:
+        top_titles = df["title"].value_counts().head(top_n_movies).index
+        top_users = df["userId"].value_counts().head(top_n_users).index
+        df = df[df["title"].isin(top_titles)]
+        df = df[df["userId"].isin(top_users)]
+    except (KeyError, TypeError) as e:
+        raise ValueError(f"Could not filter ratings by popularity: {e}") from e
+
+    if df.empty:
+        raise ValueError(
+            "No ratings left after applying Top Movies / Active Users filters. "
+            "Lower those sliders in the sidebar and rebuild."
+        )
+
+    try:
+        gmap = movies[["title", "genres"]].drop_duplicates("title").set_index("title")["genres"].to_dict()
+        umm = df.pivot_table(index="userId", columns="title",
+                             values="rating", aggfunc="mean").fillna(0)
+    except (KeyError, ValueError) as e:
+        raise ValueError(f"Could not build genre map or user–movie matrix: {e}") from e
+
     return df, movies, umm, gmap
 
 
 @st.cache_data(show_spinner=False)
 def compute_avg_ratings(top_n_movies: int, top_n_users: int) -> Dict[str, float]:
     df, _, _, _ = load_and_prepare_data(top_n_movies, top_n_users)
-    return df.groupby("title")["rating"].mean().round(2).to_dict()
+    if df.empty or "rating" not in df.columns or "title" not in df.columns:
+        return {}
+    try:
+        return df.groupby("title")["rating"].mean().round(2).to_dict()
+    except (TypeError, KeyError):
+        return {}
 
 
 @st.cache_resource(show_spinner=True)
 def build_recommender(top_n_movies: int, top_n_users: int):
     _, _, umm, gmap = load_and_prepare_data(top_n_movies, top_n_users)
-    X     = umm.to_numpy(dtype=np.float32)
-    norms = np.linalg.norm(X, axis=0)
-    norms[norms == 0] = 1e-8
-    Xn    = X / norms
-    sim   = Xn.T @ Xn
+
+    if umm.empty or umm.shape[1] == 0:
+        raise ValueError(
+            "The training matrix has no movie columns. "
+            "Increase Top Movies / Active Users in the sidebar or verify your CSV."
+        )
+
+    try:
+        X = umm.to_numpy(dtype=np.float32)
+        norms = np.linalg.norm(X, axis=0)
+        norms[norms == 0] = 1e-8
+        Xn = X / norms
+        sim = Xn.T @ Xn
+    except MemoryError as e:
+        raise RuntimeError(f"Not enough memory to build the similarity matrix: {e}") from e
+
     titles = umm.columns
-    t2i    = {t: i for i, t in enumerate(titles)}
+    t2i = {t: i for i, t in enumerate(titles)}
     return sim, gmap, titles, t2i
 
 
@@ -540,53 +827,201 @@ def excluded_match(gs: str, excl: FrozenSet[str]) -> bool:
     return bool(excl and genres_set(gs) & set(excl))
 
 
+def primary_genre_label(gs: str) -> str:
+    s = genres_set(gs)
+    return next(iter(sorted(s)), "Other")
+
+
+@st.cache_data(show_spinner=False)
+def sorted_movie_catalog(movie_titles_tuple: Tuple[str, ...]) -> Tuple[str, ...]:
+    return tuple(sorted(movie_titles_tuple))
+
+
+def explain_recommendation(
+    anchor: str,
+    rec_title: str,
+    gmap: Dict[str, str],
+    avg_ratings: Dict[str, float],
+    mood_genres: Set[str],
+) -> str:
+    if not anchor:
+        return (
+            "<strong>Why this title?</strong> Selected using hybrid collaborative filtering "
+            "and dataset ratings (mood-weighted when a mood profile is active)."
+        )
+    ag = gmap.get(anchor, "")
+    rg = gmap.get(rec_title, "")
+    aset, rset = genres_set(ag), genres_set(rg)
+    shared = sorted(aset & rset)
+    ca = html.escape(clean_title(anchor))
+    cr = html.escape(clean_title(rec_title))
+    parts: List[str] = []
+    if shared:
+        sg = html.escape(", ".join(shared[:6]) + ("…" if len(shared) > 6 else ""))
+        parts.append(
+            f"<strong>Why this title?</strong> {ca} and {cr} share catalogue genres ({sg}), "
+            f"so audience taste patterns align in the latent factor space."
+        )
+    r_sim = avg_ratings.get(rec_title)
+    r_an = avg_ratings.get(anchor)
+    if r_sim is not None and r_an is not None:
+        parts.append(
+            f"Users who rated the anchor context around ⭐{r_an} also tended to rate "
+            f"<em>{cr}</em> near ⭐{r_sim} in this MovieLens slice."
+        )
+    if mood_genres and (rset & mood_genres):
+        mg = html.escape(", ".join(sorted(rset & mood_genres)[:5]))
+        parts.append(f"Overlaps your active mood genres: {mg}.")
+    if not parts:
+        parts.append(
+            f"<strong>Why this title?</strong> Strong collaborative match from user–item ratings: "
+            f"viewers in the embedding neighbourhood of <em>{ca}</em> frequently co-rated <em>{cr}</em>."
+        )
+    return " ".join(parts)
+
+
 # ─────────────────────────────────────────────────────────────────
 #  TMDB
 # ─────────────────────────────────────────────────────────────────
 def _tmdb_key() -> Optional[str]:
     k = os.environ.get("TMDB_API_KEY", "").strip()
-    if k: return k
-    try:    return str(st.secrets["TMDB_API_KEY"]).strip() or None
-    except: return None
+    if k:
+        return k
+    try:
+        return str(st.secrets["TMDB_API_KEY"]).strip() or None
+    except (KeyError, TypeError, AttributeError):
+        return None
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def _tmdb_result(api_key: str, ct: str, yr: str) -> Optional[dict]:
-    if not api_key or not ct: return None
+    if not api_key or not ct:
+        return None
     params: Dict[str, str] = {"api_key": api_key, "query": ct}
-    if yr and yr.isdigit(): params["year"] = yr
+    if yr and yr.isdigit():
+        params["year"] = yr
     try:
-        r = requests.get("https://api.themoviedb.org/3/search/movie",
-                         params=params, timeout=12)
-        if r.status_code != 200: return None
-        res = (r.json() or {}).get("results") or []
-        return res[0] if res else None
+        r = requests.get(
+            "https://api.themoviedb.org/3/search/movie",
+            params=params,
+            timeout=12,
+        )
     except requests.RequestException:
         return None
 
+    if r.status_code != 200:
+        return None
+
+    try:
+        data = r.json()
+    except ValueError:
+        return None
+
+    if not isinstance(data, dict):
+        return None
+    raw = data.get("results")
+    if not isinstance(raw, list) or not raw:
+        return None
+    first = raw[0]
+    if not isinstance(first, dict):
+        return None
+    return first
+
+
 def get_poster(api_key: Optional[str], full: str) -> Optional[str]:
-    if not api_key: return None
-    y  = extract_year(full)
+    if not api_key:
+        return None
+    y = extract_year(full)
     ct = clean_title(full)
-    res = _tmdb_result(api_key, ct, y if y != "—" else "")
-    if not res: return None
+    try:
+        res = _tmdb_result(api_key, ct, y if y != "—" else "")
+    except (TypeError, AttributeError):
+        return None
+    if not res:
+        return None
     p = res.get("poster_path")
-    return f"https://image.tmdb.org/t/p/w342{p}" if p else None
+    if not isinstance(p, str) or not p.strip():
+        return None
+    return f"https://image.tmdb.org/t/p/w342{p.strip()}"
+
 
 def get_synopsis(api_key: Optional[str], full: str) -> str:
-    y  = extract_year(full)
+    y = extract_year(full)
     ct = clean_title(full)
     if api_key:
-        res = _tmdb_result(api_key, ct, y if y != "—" else "")
-        if res:
+        try:
+            res = _tmdb_result(api_key, ct, y if y != "—" else "")
+        except (TypeError, AttributeError):
+            res = None
+        if res and isinstance(res, dict):
             ov = (res.get("overview") or "").strip()
-            if ov: return ov
+            if ov:
+                return ov
     return MOVIE_SYNOPSES.get(full, MOVIE_SYNOPSES["default"])
 
+
+def get_tmdb_movie_id(api_key: Optional[str], full: str) -> Optional[int]:
+    if not api_key:
+        return None
+    y = extract_year(full)
+    ct = clean_title(full)
+    try:
+        res = _tmdb_result(api_key, ct, y if y != "—" else "")
+    except (TypeError, AttributeError):
+        return None
+    if not res or not isinstance(res, dict):
+        return None
+    mid = res.get("id")
+    if isinstance(mid, int):
+        return mid
+    if isinstance(mid, str) and str(mid).isdigit():
+        return int(mid)
+    return None
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _tmdb_fetch_review_texts(api_key: str, movie_id: int) -> Tuple[str, ...]:
+    if not api_key or movie_id <= 0:
+        return tuple()
+    try:
+        r = requests.get(
+            f"https://api.themoviedb.org/3/movie/{movie_id}/reviews",
+            params={"api_key": api_key},
+            timeout=14,
+        )
+    except requests.RequestException:
+        return tuple()
+    if r.status_code != 200:
+        return tuple()
+    try:
+        data = r.json()
+    except ValueError:
+        return tuple()
+    if not isinstance(data, dict):
+        return tuple()
+    raw = data.get("results")
+    if not isinstance(raw, list):
+        return tuple()
+    out: List[str] = []
+    for item in raw[:20]:
+        if not isinstance(item, dict):
+            continue
+        c = (item.get("content") or "").strip()
+        if c:
+            out.append(c[:1200])
+    return tuple(out)
+
+
 def show_poster(api_key: Optional[str], full: str) -> None:
-    if not api_key: return
+    if not api_key:
+        return
     pu = get_poster(api_key, full)
-    if pu: st.image(pu, use_container_width=True)
+    if not pu:
+        return
+    try:
+        st.image(pu, use_container_width=True)
+    except Exception:
+        st.markdown(_POSTER_FALLBACK_HTML, unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -602,46 +1037,81 @@ def recommend(
     avg_ratings: Dict[str, float],
     excl: FrozenSet[str] = frozenset(),
     mood_genres: Set[str] = set(),
-    mood_boost: float = 0.15,
     max_scan: int = 4000,
 ) -> pd.DataFrame:
-    if movie_name not in t2i:
-        return pd.DataFrame(columns=["movie", "score", "genres", "mood_match"])
+    empty = pd.DataFrame(columns=["movie", "score", "genres", "mood_match"])
+    try:
+        if movie_name not in t2i:
+            return empty
 
-    idx        = t2i[movie_name]
-    sim_scores = sim_matrix[idx].copy()
+        idx = t2i[movie_name]
+        n = len(movie_titles)
+        sim_scores = np.clip(sim_matrix[idx].copy().astype(np.float32), 0.0, 1.0)
 
-    if mood_genres:
-        for i, t in enumerate(movie_titles):
-            if i != idx and genres_set(gmap.get(t, "")) & mood_genres:
-                sim_scores[i] = min(1.0, sim_scores[i] + mood_boost)
+        max_r = max(avg_ratings.values()) if avg_ratings else 5.0
+        if max_r == 0:
+            max_r = 5.0
 
-    max_r = max(avg_ratings.values()) if avg_ratings else 5.0
-    if max_r == 0: max_r = 5.0
+        rating_norm = np.array(
+            [avg_ratings.get(str(movie_titles[i]), 0.0) / max_r for i in range(n)],
+            dtype=np.float32,
+        )
 
-    hybrid = np.array([
-        sim_scores[i] * 0.7 + (avg_ratings.get(str(movie_titles[i]), 0.0) / max_r) * 0.3
-        for i in range(len(movie_titles))
-    ], dtype=np.float32)
+        if mood_genres:
+            mg_den = float(max(1, len(mood_genres)))
+            mood_arr = np.zeros(n, dtype=np.float32)
+            for i in range(n):
+                inter = len(genres_set(gmap.get(movie_titles[i], "")) & mood_genres)
+                mood_arr[i] = min(1.0, inter / mg_den)
+            hybrid = (sim_scores * 0.55 + rating_norm * 0.25 + mood_arr * 0.20).astype(np.float32)
+        else:
+            hybrid = (sim_scores * 0.70 + rating_norm * 0.30).astype(np.float32)
 
-    picked: List[int] = []
-    scanned = 0
-    for i in np.argsort(-hybrid).tolist():
-        if i == idx: continue
-        scanned += 1
-        if scanned > max_scan: break
-        if excluded_match(gmap.get(movie_titles[i], ""), excl): continue
-        picked.append(i)
-        if len(picked) >= top_k: break
+        order = np.argsort(-hybrid).tolist()
+        cand: List[int] = []
+        for i in order:
+            if i == idx:
+                continue
+            if excluded_match(gmap.get(movie_titles[i], ""), excl):
+                continue
+            cand.append(i)
+            if len(cand) >= max_scan:
+                break
 
-    if not picked:
-        return pd.DataFrame(columns=["movie", "score", "genres", "mood_match"])
+        picked: List[int] = []
+        genre_count: Dict[str, int] = {}
+        picked_set: Set[int] = set()
 
-    df = pd.DataFrame({"movie": movie_titles[picked], "score": hybrid[picked]})
-    df["genres"]     = df["movie"].map(lambda t: gmap.get(t, ""))
-    df["mood_match"] = df["genres"].apply(
-        lambda g: bool(genres_set(g) & mood_genres) if mood_genres else False)
-    return df
+        for i in cand:
+            if len(picked) >= top_k:
+                break
+            pg = primary_genre_label(gmap.get(movie_titles[i], ""))
+            if genre_count.get(pg, 0) >= 2:
+                continue
+            picked.append(i)
+            picked_set.add(i)
+            genre_count[pg] = genre_count.get(pg, 0) + 1
+
+        if len(picked) < top_k:
+            for i in cand:
+                if len(picked) >= top_k:
+                    break
+                if i in picked_set:
+                    continue
+                picked.append(i)
+                picked_set.add(i)
+
+        if not picked:
+            return empty
+
+        df = pd.DataFrame({"movie": movie_titles[picked], "score": hybrid[picked]})
+        df["genres"] = df["movie"].map(lambda t: gmap.get(t, ""))
+        df["mood_match"] = df["genres"].apply(
+            lambda g: bool(genres_set(g) & mood_genres) if mood_genres else False
+        )
+        return df
+    except (IndexError, KeyError, TypeError, ValueError):
+        return empty
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -667,7 +1137,7 @@ def build_why_tags(
         tags.append(f'<span class="why-tag tag-rating">⭐ Highly rated ({r})</span>')
     if anchor:
         tags.append(
-            f'<span class="why-tag tag-anchor">🎬 Fans of {clean_title(anchor)[:22]} also watched</span>'
+            f'<span class="why-tag tag-anchor">🎬 Fans of {html.escape(clean_title(anchor)[:22])} also watched</span>'
         )
     if from_history:
         tags.append('<span class="why-tag tag-history">🕓 From watch history</span>')
@@ -693,14 +1163,12 @@ def render_movie_card(
     with pc:
         pu = get_poster(api_key, full_title) if api_key else None
         if pu:
-            st.image(pu, use_container_width=True)
+            try:
+                st.image(pu, use_container_width=True)
+            except Exception:
+                st.markdown(_POSTER_FALLBACK_HTML, unsafe_allow_html=True)
         else:
-            st.markdown(
-                "<div style='background:#0d1117;border:1px solid #1f2937;border-radius:8px;"
-                "height:200px;display:flex;align-items:center;justify-content:center;"
-                "color:#374151;font-size:2.5rem;'>🎬</div>",
-                unsafe_allow_html=True,
-            )
+            st.markdown(_POSTER_FALLBACK_HTML, unsafe_allow_html=True)
     with ic:
         st.markdown(
             f"<div class='movie-detail-card'>"
@@ -719,9 +1187,13 @@ def render_rec_cards(
     avg_ratings: Dict[str, float],
     api_key: Optional[str],
     top_k: int,
+    gmap: Dict[str, str],
     anchor: str = "",
     from_history: bool = False,
+    mood_genres: Optional[Set[str]] = None,
+    feedback_key_prefix: str = "rec",
 ) -> None:
+    mood_genres = mood_genres or set()
     if recs.empty:
         st.warning("No recommendations found for the current filters.")
         return
@@ -735,19 +1207,26 @@ AI-powered personalised matches
 </div>
 """, unsafe_allow_html=True)
 
-    for _, row in recs.iterrows():
-        title  = str(row["movie"])
-        score  = float(row["score"])
+    uname = st.session_state.get("username", "guest")
+
+    for i, (_, row) in enumerate(recs.iterrows()):
+        title = str(row["movie"])
+        score = float(row["score"])
         match_pct = min(99, int(score * 100))
-        graw   = str(row.get("genres", ""))
-        gd     = graw.replace("|", "  ·  ") if graw else "—"
-        year   = extract_year(title)
-        ct     = clean_title(title)
+        graw = str(row.get("genres", ""))
+        gd = graw.replace("|", "  ·  ") if graw else "—"
+        year = extract_year(title)
+        ct = clean_title(title)
         rating = avg_ratings.get(title)
-        rstr   = f"⭐ {rating}" if rating else "—"
+        rstr = f"⭐ {rating}" if rating else "—"
         mmatch = bool(row.get("mood_match", False))
-        syn    = get_synopsis(api_key, title)
-        why    = build_why_tags(title, score, mmatch, avg_ratings, anchor, from_history)
+        syn = get_synopsis(api_key, title)
+        why = build_why_tags(title, score, mmatch, avg_ratings, anchor, from_history)
+        expl = explain_recommendation(anchor, title, gmap, avg_ratings, mood_genres)
+
+        ct_safe = html.escape(ct)
+        gd_safe = html.escape(gd)
+        syn_safe = html.escape(syn)
 
         pc, ic = st.columns([1, 3])
         with pc:
@@ -755,37 +1234,72 @@ AI-powered personalised matches
         with ic:
             st.markdown(
                 f"<div class='rec-card'>"
-                f"<div class='rec-title'>{ct} <span style='color:#374151'>({year})</span></div>"
-                f"<div class='rec-meta'>{gd}&nbsp;·&nbsp;{rstr}</div>"
+                f"<div class='rec-title'>{ct_safe} <span style='color:#374151'>({html.escape(year)})</span></div>"
+                f"<div class='rec-meta'>{gd_safe}&nbsp;·&nbsp;{rstr}</div>"
                 f"<span class='rec-score'>🎯 Relevance Score: {match_pct}%</span>"
-                f"<div class='rec-synopsis'>{syn}</div>"
+                f"<div class='rec-synopsis'>{syn_safe}</div>"
                 f"{why}"
                 f"</div>",
                 unsafe_allow_html=True,
             )
+            st.markdown(f"<div class='rec-explain'>{expl}</div>", unsafe_allow_html=True)
+            if uname != "guest":
+                b1, b2, b3 = st.columns(3)
+                with b1:
+                    if st.button("👍 Helpful", key=f"{feedback_key_prefix}_fb_help_{i}", use_container_width=True):
+                        rec_feedback_push(uname, title, anchor, "helpful")
+                with b2:
+                    if st.button("👎 Not for me", key=f"{feedback_key_prefix}_fb_skip_{i}", use_container_width=True):
+                        rec_feedback_push(uname, title, anchor, "not_interested")
+                with b3:
+                    if st.button("❤️ Loved it", key=f"{feedback_key_prefix}_fb_love_{i}", use_container_width=True):
+                        rec_feedback_push(uname, title, anchor, "loved")
+            else:
+                st.caption("Sign in to persist 👍 / 👎 / ❤️ feedback in SQLite.")
 
 
 # ─────────────────────────────────────────────────────────────────
 #  Sentiment analysis section
 # ─────────────────────────────────────────────────────────────────
-def render_sentiment_section(selected_movie: str) -> None:
+def render_sentiment_section(selected_movie: str, tmdb_key: Optional[str] = None) -> None:
     import plotly.express as px
     from textblob import TextBlob
 
     st.markdown("<div class='section-hdr'>🎭 Audience Sentiment Analysis</div>", unsafe_allow_html=True)
-    st.caption(
-        "NLP sentiment scoring via TextBlob. "
-        "Currently using simulated prototype reviews for offline demonstration — "
-        "future scope: live integration via review APIs or web scraping."
-    )
 
-    reviews = SAMPLE_REVIEWS.get(selected_movie, SAMPLE_REVIEWS["default"])
+    reviews: List[str] = list(SAMPLE_REVIEWS.get(selected_movie, SAMPLE_REVIEWS["default"]))
+    use_live = False
+    if tmdb_key:
+        mid = get_tmdb_movie_id(tmdb_key, selected_movie)
+        if mid is not None:
+            ext = list(_tmdb_fetch_review_texts(tmdb_key, mid))
+            if len(ext) >= 2:
+                reviews = ext
+                use_live = True
+
+    if use_live:
+        st.caption(
+            "Live TMDB review excerpts (where available) · TextBlob polarity for explainable sentiment."
+        )
+    else:
+        st.caption(
+            "NLP sentiment scoring via TextBlob. "
+            "Prototype sample reviews when TMDB excerpts are unavailable — "
+            "future scope: larger corpora or transformer models."
+        )
 
     scored = []
-    for r in reviews:
-        pol   = TextBlob(r).sentiment.polarity
-        label = "Positive 😊" if pol > 0.05 else ("Negative 😟" if pol < -0.05 else "Neutral 😐")
-        scored.append({"Review": r, "Sentiment": label, "Polarity": round(pol, 3)})
+    try:
+        for r in reviews:
+            pol = TextBlob(str(r)).sentiment.polarity
+            label = "Positive 😊" if pol > 0.05 else ("Negative 😟" if pol < -0.05 else "Neutral 😐")
+            scored.append({"Review": r, "Sentiment": label, "Polarity": round(pol, 3)})
+    except Exception as e:
+        st.warning(f"Sentiment scoring failed ({type(e).__name__}: {e}). Showing neutral placeholders.")
+        scored = [
+            {"Review": r, "Sentiment": "Neutral 😐", "Polarity": 0.0}
+            for r in reviews
+        ]
 
     scored_df = pd.DataFrame(scored)
     st.markdown("**📋 Sample Reviews**")
@@ -793,17 +1307,20 @@ def render_sentiment_section(selected_movie: str) -> None:
 
     sc = scored_df["Sentiment"].value_counts().reset_index()
     sc.columns = ["Sentiment", "Count"]
-    fig = px.pie(
-        sc, names="Sentiment", values="Count", color="Sentiment", hole=0.38,
-        color_discrete_map={
-            "Positive 😊": "#10b981", "Neutral 😐": "#475569", "Negative 😟": "#ef4444"
-        },
-        title="Sentiment Distribution",
-    )
-    fig.update_traces(textposition="inside", textinfo="percent+label")
-    fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", font_color="#e2e8f0",
-                      font_family="DM Sans", showlegend=False)
-    st.plotly_chart(fig, use_container_width=True)
+    try:
+        fig = px.pie(
+            sc, names="Sentiment", values="Count", color="Sentiment", hole=0.38,
+            color_discrete_map={
+                "Positive 😊": "#10b981", "Neutral 😐": "#475569", "Negative 😟": "#ef4444"
+            },
+            title="Sentiment Distribution",
+        )
+        fig.update_traces(textposition="inside", textinfo="percent+label")
+        fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", font_color="#e2e8f0",
+                          font_family="DM Sans", showlegend=False)
+        st.plotly_chart(fig, use_container_width=True)
+    except Exception as e:
+        st.warning(f"Could not render sentiment chart ({type(e).__name__}: {e}).")
 
     avg_pol = scored_df["Polarity"].mean()
     overall = "Positive 😊" if avg_pol > 0.05 else ("Negative 😟" if avg_pol < -0.05 else "Neutral 😐")
@@ -825,9 +1342,12 @@ def render_sentiment_section(selected_movie: str) -> None:
         key="user_review_input",
     )
     if user_review.strip():
-        up = TextBlob(user_review).sentiment.polarity
-        ul = "Positive 😊" if up > 0.05 else ("Negative 😟" if up < -0.05 else "Neutral 😐")
-        st.success(f"**Your review sentiment:** {ul}  (Polarity: {up:.3f})")
+        try:
+            up = TextBlob(user_review).sentiment.polarity
+            ul = "Positive 😊" if up > 0.05 else ("Negative 😟" if up < -0.05 else "Neutral 😐")
+            st.success(f"**Your review sentiment:** {ul}  (Polarity: {up:.3f})")
+        except Exception as e:
+            st.warning(f"Could not analyse that review ({type(e).__name__}: {e}).")
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -841,7 +1361,7 @@ def render_unified_tab(
     if st.session_state.get("username") == "guest":
         st.markdown(
             "<div class='guest-banner'>"
-            "👤 Guest mode — watch history and personalisation won't persist across sessions."
+            "👤 Guest mode — sign in to persist watch history, feedback, and profile in SQLite."
             "</div>",
             unsafe_allow_html=True,
         )
@@ -878,7 +1398,8 @@ def render_unified_tab(
         unsafe_allow_html=True,
     )
 
-    all_sorted = sorted(movie_titles.tolist())
+    base_titles = sorted_movie_catalog(tuple(movie_titles.tolist()))
+    all_sorted = list(base_titles)
     if excluded_frozen:
         all_sorted = [t for t in all_sorted if not excluded_match(gmap.get(t, ""), excluded_frozen)]
 
@@ -932,7 +1453,7 @@ def render_unified_tab(
     elif has_mood:
         st.markdown(
             f"<div class='filter-banner banner-mood'>"
-            f"🎭 Mood active: {selected_mood} — boosting {', '.join(sorted(mood_genres))}</div>",
+            f"🎭 Mood active: {selected_mood} — genres weighted at 20% in the hybrid score.</div>",
             unsafe_allow_html=True,
         )
     elif has_excl:
@@ -987,23 +1508,36 @@ def render_unified_tab(
             tmdb_key,
         )
 
-    # Skeleton → load → render recs
+    # Skeleton + spinner while hybrid engine runs
     st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
     sk = st.empty()
-    sk.markdown("".join([SKELETON_HTML] * 3), unsafe_allow_html=True)
-
-    recs = recommend(
-        sim_matrix=sim_matrix, movie_titles=movie_titles, gmap=gmap, t2i=t2i,
-        movie_name=anchor, top_k=top_k, avg_ratings=avg_ratings,
-        excl=excluded_frozen, mood_genres=mood_genres,
+    with st.spinner("Generating recommendations…"):
+        sk.markdown("".join([SKELETON_HTML] * 3), unsafe_allow_html=True)
+        recs = recommend(
+            sim_matrix=sim_matrix, movie_titles=movie_titles, gmap=gmap, t2i=t2i,
+            movie_name=anchor, top_k=top_k, avg_ratings=avg_ratings,
+            excl=excluded_frozen, mood_genres=mood_genres,
+        )
+    _rec_sig = (
+        str(selected_movie or ""),
+        str(selected_mood or ""),
+        str(anchor or ""),
+        str(genre_filter),
+        int(top_k),
+        tuple(sorted(excluded_frozen)),
     )
+    if st.session_state.get("_rec_gen_sig") != _rec_sig:
+        st.session_state["rec_gens"] = st.session_state.get("rec_gens", 0) + 1
+        st.session_state["_rec_gen_sig"] = _rec_sig
 
-    # Update watch history (skip for guest — ephemeral session only)
-    hist: List[str] = st.session_state.get("watch_history", [])
-    if anchor and anchor in t2i:
-        hist = [m for m in hist if m != anchor]
-        hist.insert(0, anchor)
-        st.session_state["watch_history"] = hist[:5]
+    uname = st.session_state.get("username", "guest")
+    if uname != "guest" and anchor and anchor in t2i:
+        watch_history_push(uname, anchor)
+    elif uname == "guest" and anchor and anchor in t2i:
+        gh = st.session_state.get("watch_history", [])
+        gh = [m for m in gh if m != anchor]
+        gh.insert(0, anchor)
+        st.session_state["watch_history"] = gh[:5]
 
     sk.empty()
 
@@ -1011,18 +1545,24 @@ def render_unified_tab(
         st.info(f"🚫 Wellbeing filter active — {', '.join(sorted(excluded_frozen))} excluded from all results.")
 
     st.caption(
-        "**Hybrid ranking:** 70% collaborative similarity + 30% audience rating. "
-        "Score ≈ 1.0 = strongest match."
+        "**Hybrid ranking:** with a mood selected → 55% collaborative similarity + 25% audience rating + "
+        "**20% mood–genre alignment**. Without mood → 70% / 30%. "
+        "Diversity cap: at most two picks per primary genre before filling remaining slots."
     )
-    render_rec_cards(recs, avg_ratings, tmdb_key, top_k, anchor=anchor or "")
+    render_rec_cards(
+        recs, avg_ratings, tmdb_key, top_k, gmap,
+        anchor=anchor or "", mood_genres=mood_genres,
+    )
 
     # Sentiment section (only when a movie is explicitly selected)
     if selected_movie:
         st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
-        render_sentiment_section(selected_movie)
+        render_sentiment_section(selected_movie, tmdb_key)
 
-    # Watch-history personalisation
-    hist = st.session_state.get("watch_history", [])
+    if uname == "guest":
+        hist = st.session_state.get("watch_history", [])
+    else:
+        hist = watch_history_list(uname)
     if len(hist) > 1:
         st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
         st.markdown(
@@ -1033,8 +1573,10 @@ def render_unified_tab(
         all_recs: List[pd.DataFrame] = []
         for ht in hist:
             if ht in t2i:
-                hr = recommend(sim_matrix, movie_titles, gmap, t2i, ht, 20,
-                               avg_ratings, excluded_frozen)
+                hr = recommend(
+                    sim_matrix, movie_titles, gmap, t2i, ht, 20,
+                    avg_ratings, excluded_frozen, mood_genres=mood_genres,
+                )
                 all_recs.append(hr)
         if all_recs:
             combined = pd.concat(all_recs).drop_duplicates("movie")
@@ -1042,7 +1584,11 @@ def render_unified_tab(
             combined = (combined.groupby("movie", as_index=False)
                         .agg({"score": "mean", "genres": "first", "mood_match": "any"})
                         .sort_values("score", ascending=False).head(8).reset_index(drop=True))
-            render_rec_cards(combined, avg_ratings, tmdb_key, 8, from_history=True)
+            render_rec_cards(
+                combined, avg_ratings, tmdb_key, 8, gmap,
+                from_history=True, mood_genres=mood_genres,
+                feedback_key_prefix="hist",
+            )
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -1156,6 +1702,32 @@ def render_dashboard_tab(gmap: Dict[str, str], avg_ratings: Dict[str, float], la
                 unsafe_allow_html=True,
             )
 
+    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
+    with st.expander("Offline evaluation snapshot (MAE — report-friendly)"):
+        st.markdown(
+            "Hold-out **10%** of ratings (capped at 8k rows). Compare **global-mean** vs "
+            "**per-movie mean** predictors trained only on the remaining 90% — common baselines "
+            "for recommender write-ups."
+        )
+        if len(df_dash) < 200:
+            st.info("Not enough ratings for a stable hold-out in this slice.")
+        else:
+            n_hold = min(8000, max(500, len(df_dash) // 10))
+            hold = df_dash.sample(n=n_hold, random_state=42)
+            train = df_dash.drop(hold.index)
+            g_mean = float(train["rating"].mean())
+            m_mean = train.groupby("title")["rating"].mean()
+            h2 = hold.merge(m_mean.rename("pred_movie"), on="title", how="left")
+            h2["pred_movie"] = h2["pred_movie"].fillna(g_mean)
+            mae_movie = float((h2["rating"] - h2["pred_movie"]).abs().mean())
+            mae_glob = float((h2["rating"] - g_mean).abs().mean())
+            c_m, c_g = st.columns(2)
+            c_m.metric("MAE per-movie mean", f"{mae_movie:.3f}")
+            c_g.metric("MAE global mean", f"{mae_glob:.3f}")
+            st.caption(
+                "Precision@K / Recall@K need relevance judgements; document protocol in the report."
+            )
+
 
 # ─────────────────────────────────────────────────────────────────
 #  Main
@@ -1166,6 +1738,8 @@ def main() -> None:
 
     if not render_auth_screen():
         st.stop()
+
+    _init_auth_db()
 
     st.title("🎬 RecoMind")
     st.caption(
@@ -1193,14 +1767,37 @@ def main() -> None:
 
     last = st.session_state["last_built_params"]
 
-    with st.spinner("⚙️ Building recommendation model…"):
-        sim_matrix, gmap, movie_titles, t2i = build_recommender(
-            last["top_n_movies"], last["top_n_users"]
+    try:
+        with st.spinner("⚙️ Building recommendation model…"):
+            sim_matrix, gmap, movie_titles, t2i = build_recommender(
+                last["top_n_movies"], last["top_n_users"]
+            )
+        avg_ratings = compute_avg_ratings(last["top_n_movies"], last["top_n_users"])
+        genre_options = collect_genre_options(gmap)
+        tmdb_key = _tmdb_key()
+        df_nav, _, _, _ = load_and_prepare_data(last["top_n_movies"], last["top_n_users"])
+    except (ValueError, RuntimeError, FileNotFoundError) as e:
+        st.error(f"**Data or model error:** {e}")
+        st.info(
+            "Verify CSV files under `Data/MovieLens/`, required columns (userId, title, rating, …), "
+            "network for first-time MovieLens download, and sidebar training limits."
         )
+        st.stop()
+    except Exception as e:
+        st.error(f"**Unexpected error while loading the recommender:** {type(e).__name__}: {e}")
+        st.stop()
 
-    avg_ratings   = compute_avg_ratings(last["top_n_movies"], last["top_n_users"])
-    genre_options = collect_genre_options(gmap)
-    tmdb_key      = _tmdb_key()
+    n_movies_nav = int(df_nav["title"].nunique())
+    n_users_nav = int(df_nav["userId"].nunique())
+    n_recs_nav = int(st.session_state.get("rec_gens", 0))
+    st.markdown(
+        f"<div class='top-nav-stats'>"
+        f"<span>🎬 Movies <strong>{n_movies_nav:,}</strong></span>"
+        f"<span>👥 Users <strong>{n_users_nav:,}</strong></span>"
+        f"<span>✨ Recommendations generated <strong>{n_recs_nav:,}</strong></span>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
 
     with st.sidebar:
         global_excluded = st.multiselect(
@@ -1221,6 +1818,8 @@ def main() -> None:
             st.session_state["logged_in"] = False
             st.session_state["username"]  = ""
             st.session_state["watch_history"] = []
+            st.session_state.pop("rec_gens", None)
+            st.session_state.pop("_rec_gen_sig", None)
             st.rerun()
 
     tab_rec, tab_dash = st.tabs(["🎬 Recommend", "📊 Dashboard"])
