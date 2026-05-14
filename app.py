@@ -121,10 +121,36 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
 }
 
 .rec-card {
-  background: #0d1117; border: 1px solid #1f2937; border-radius: 10px;
-  padding: .95rem 1.15rem; margin-bottom: .55rem;
+  background: linear-gradient(145deg, #0f172a, #111827);
+  border: 1px solid #1f2937;
+  border-radius: 14px;
+  padding: 1rem 1.2rem;
+  margin-bottom: .8rem;
+  transition: all .25s ease;
+  overflow: hidden;
+  position: relative;
 }
-.rec-title { font-size: 1rem; font-weight: 700; color: #f1f5f9; margin-bottom: .25rem; }
+.rec-card:hover {
+  transform: translateY(-3px);
+  border-color: #374151;
+  box-shadow: 0 10px 24px rgba(0,0,0,.35);
+}
+.rec-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 3px;
+  width: 100%;
+  background: linear-gradient(90deg, #ef4444, #8b5cf6, #06b6d4);
+}
+.rec-title {
+  font-size: 1.08rem;
+  font-weight: 700;
+  color: #f8fafc;
+  margin-bottom: .35rem;
+  letter-spacing: -.02em;
+}
 .rec-meta  { font-size: .81rem; color: #6b7280; }
 .rec-score {
   font-family: 'Space Mono', monospace; font-size: .76rem; color: #10b981;
@@ -157,12 +183,62 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
   color: #374151; text-transform: uppercase; letter-spacing: .08em;
   margin: 1.3rem 0 .65rem;
 }
-.section-divider { border: none; border-top: 1px solid #1f2937; margin: 1.3rem 0; }
+.section-divider { border: none; border-top: 1px solid #1f2937; margin: .8rem 0; }
+
+.stButton > button {
+  border-radius: 10px !important;
+  font-weight: 600 !important;
+  transition: all .2s ease !important;
+}
+.stButton > button:hover {
+  transform: translateY(-1px);
+}
 
 .helper-msg {
   background: #0c1a35; border: 1px dashed #1e3a5f; border-radius: 10px;
   padding: 1.2rem 1.5rem; color: #3b82f6; font-size: .9rem;
   text-align: center; margin: 1rem 0;
+}
+
+.empty-cinema-banner {
+  border-radius: 14px;
+  padding: 2.2rem 1.5rem 2rem;
+  margin: 0 0 1rem;
+  text-align: center;
+  background: linear-gradient(145deg, #0a0f1a 0%, #151528 40%, #0f172a 100%);
+  border: 1px solid #1e293b;
+  position: relative;
+  overflow: hidden;
+}
+.empty-cinema-banner::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 80% 50% at 50% 0%, rgba(139, 92, 246, .12), transparent 55%);
+  pointer-events: none;
+}
+.empty-cinema-inner { position: relative; z-index: 1; }
+.empty-cinema-kicker {
+  font-family: 'Space Mono', monospace;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-bottom: .5rem;
+}
+.empty-cinema-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #e2e8f0;
+  margin-bottom: .35rem;
+}
+.empty-cinema-sub {
+  font-size: .88rem;
+  color: #64748b;
+  max-width: 28rem;
+  margin: 0 auto;
+  line-height: 1.5;
 }
 
 .skeleton {
@@ -650,11 +726,19 @@ def render_rec_cards(
         st.warning("No recommendations found for the current filters.")
         return
 
-    st.markdown("<div class='section-hdr'>🎯 Recommendations</div>", unsafe_allow_html=True)
+    st.markdown("""
+<div style='display:flex;align-items:center;gap:10px;margin-bottom:.6rem;flex-wrap:wrap;'>
+<h2 style='margin:0;font-size:1.35rem;'>🎯 Top Recommendations</h2>
+<span style='font-size:.8rem;color:#64748b;'>
+AI-powered personalised matches
+</span>
+</div>
+""", unsafe_allow_html=True)
 
     for _, row in recs.iterrows():
         title  = str(row["movie"])
         score  = float(row["score"])
+        match_pct = min(99, int(score * 100))
         graw   = str(row.get("genres", ""))
         gd     = graw.replace("|", "  ·  ") if graw else "—"
         year   = extract_year(title)
@@ -673,7 +757,7 @@ def render_rec_cards(
                 f"<div class='rec-card'>"
                 f"<div class='rec-title'>{ct} <span style='color:#374151'>({year})</span></div>"
                 f"<div class='rec-meta'>{gd}&nbsp;·&nbsp;{rstr}</div>"
-                f"<span class='rec-score'>score {score:.4f}</span>"
+                f"<span class='rec-score'>🎯 Relevance Score: {match_pct}%</span>"
                 f"<div class='rec-synopsis'>{syn}</div>"
                 f"{why}"
                 f"</div>",
@@ -766,27 +850,24 @@ def render_unified_tab(
 
     # ── Trending strip ──────────────────────────────────────────
     df_ratings, _, _, _ = load_and_prepare_data(last["top_n_movies"], last["top_n_users"])
-    top_counts     = df_ratings["title"].value_counts().head(8)
-    trending_4     = [t for t in top_counts.index
-                      if not excluded_match(gmap.get(t, ""), excluded_frozen)][:4]
+    top_counts = df_ratings["title"].value_counts().head(24)
 
-    if trending_4:
+    trending_rows: List[dict] = []
+    for t in top_counts.index:
+        if excluded_match(gmap.get(t, ""), excluded_frozen):
+            continue
+        trending_rows.append({
+            "Movie": clean_title(t),
+            "Year": extract_year(t),
+            "Avg Rating": round(float(avg_ratings.get(t, 0.0)), 2),
+            "# Ratings": int(top_counts[t]),
+        })
+        if len(trending_rows) >= 8:
+            break
+    if trending_rows:
         st.markdown("<div class='section-hdr'>🔥 Trending Now</div>", unsafe_allow_html=True)
-        tcols = st.columns(len(trending_4))
-        for i, t in enumerate(trending_4):
-            with tcols[i]:
-                r = avg_ratings.get(t, 0)
-                st.markdown(
-                    f"<div style='background:#0d1117;border:1px solid #1f2937;border-radius:8px;"
-                    f"padding:.6rem .8rem;'>"
-                    f"<div style='font-size:.84rem;font-weight:700;color:#e2e8f0;"
-                    f"white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'>"
-                    f"{clean_title(t)}</div>"
-                    f"<div style='font-size:.74rem;color:#475569;'>"
-                    f"{extract_year(t)}&nbsp;·&nbsp;⭐&nbsp;{r}</div>"
-                    f"</div>",
-                    unsafe_allow_html=True,
-                )
+        trending_df = pd.DataFrame(trending_rows)
+        st.dataframe(trending_df, use_container_width=True, hide_index=True)
 
     st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
 
@@ -808,9 +889,12 @@ def render_unified_tab(
         all_sorted = [t for t in all_sorted if genre_filter in genres_set(gmap.get(t, ""))]
     with col_movie:
         selected_movie = st.selectbox(
-            "🔍 Search & Select Movie",
-            options=all_sorted, index=None,
-            placeholder="Type to search…", key="uni_movie",
+            "Movie",
+            options=all_sorted,
+            index=None,
+            placeholder="Type movie name...",
+            key="movie_searchbox",
+            help="Type to filter titles — same list powers recommendations below.",
         )
 
     # Mood row
@@ -858,8 +942,19 @@ def render_unified_tab(
             unsafe_allow_html=True,
         )
 
-    # Empty state
+    # Empty state (single picker: selectbox only; mood optional)
     if not selected_movie and not has_mood:
+        st.markdown(
+            "<div class='empty-cinema-banner'>"
+            "<div class='empty-cinema-inner'>"
+            "<div class='empty-cinema-kicker'>RecoMind · Ready</div>"
+            "<div class='empty-cinema-title'>🎬 Choose a title to begin</div>"
+            "<div class='empty-cinema-sub'>"
+            "Use the field above to search the catalogue, or activate a mood for "
+            "instant mood-aware picks — recommendations update automatically."
+            "</div></div></div>",
+            unsafe_allow_html=True,
+        )
         st.markdown(
             "<div class='helper-msg'>"
             "Select a movie above — or pick a mood for instant recommendations.</div>",
