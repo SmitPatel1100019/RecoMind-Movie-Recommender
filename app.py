@@ -505,134 +505,145 @@ def rec_feedback_push(username: str, movie_title: str, anchor_title: str, sentim
 
 def render_auth_screen() -> bool:
     """Returns True if user is logged in. Shows login/signup/guest UI otherwise."""
-    _init_auth_db()
-
     if st.session_state.get("logged_in"):
         return True
 
+    _init_auth_db()
+
+    # Auth-only layout (do not load DARK_CARD_CSS here — main() applies it after login).
     st.markdown("""
     <style>
-    .block-container {
-        padding-top: 1rem !important;
-        padding-bottom: 1rem !important;
+    [data-testid="stAppViewContainer"] {
+        background-color: #0d1117;
     }
-
-    .main > div {
-        padding-top: 0rem;
+    [data-testid="stHeader"] {
+        background-color: transparent;
     }
-
-    .auth-container {
-        max-width: 520px;
-        margin: 80px auto 0 auto !important;
-        padding: 2rem 2rem 1.5rem;
-        background: #0d1117;
-        border: 1px solid #1f2937;
-        border-radius: 18px;
-        box-shadow: 0 0 30px rgba(0,0,0,0.35);
-    }
-
-    .auth-title {
-        text-align: center;
-        font-size: 2.8rem;
-        font-weight: 700;
-        margin-bottom: 1.5rem;
-        color: #f8fafc;
-    }
-
-    div[data-baseweb="tab-list"] {
+    section.main > div {
+        min-height: calc(100vh - 5rem);
+        display: flex;
+        flex-direction: column;
         justify-content: center;
+        align-items: stretch;
+        padding-top: 0 !important;
     }
-
-    .auth-container .stCaption {
-        text-align: center;
-        display: block;
-        margin: -0.75rem 0 1.25rem;
-        color: #64748b !important;
+    .block-container {
+        padding-top: 0.5rem !important;
+        padding-bottom: 2rem !important;
+        max-width: 520px !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+    }
+    div[data-testid="stRadio"] > div {
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+    }
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        background: #0d1117 !important;
+        border-color: #1f2937 !important;
+        border-radius: 18px !important;
+        box-shadow: 0 0 30px rgba(0,0,0,0.35) !important;
+        padding: 0.35rem 0.5rem 0.85rem !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
-    # Start centered container
-    st.markdown('<div class="auth-container">', unsafe_allow_html=True)
-
-    st.markdown(
-        "<div class='auth-title'>🎬 RecoMind</div>",
-        unsafe_allow_html=True
-    )
-    st.caption("AI-powered emotional movie recommendation system")
-
-    tab_login, tab_signup = st.tabs(["Login", "Sign Up"])
-
-    with tab_login:
-        uname = st.text_input("Username", key="login_user")
-        st.caption("Registered usernames: letters, digits, underscore · 3–32 characters.")
-        pwd = st.text_input("Password", type="password", key="login_pwd")
-
-        col_login, col_guest = st.columns(2)
-
-        with col_login:
-            if st.button("Login", use_container_width=True):
-                ok, msg = _login(uname, pwd)
-
-                if ok:
-                    st.session_state["logged_in"] = True
-                    st.session_state["username"] = uname.strip().lower()
-                    st.rerun()
-                else:
-                    st.error(msg)
-
-        with col_guest:
-            if st.button("👤 Guest / Demo", use_container_width=True):
-                st.session_state["logged_in"] = True
-                st.session_state["username"] = "guest"
-                st.rerun()
-
-    with tab_signup:
-        new_user = st.text_input("Choose Username", key="signup_user")
-        st.caption("3–32 characters: letters, digits, or underscore only (example: smit_patel).")
-
-        new_pwd = st.text_input(
-            "Choose Password (min 8 chars, 1 uppercase, 1 number)",
-            type="password",
-            key="signup_pwd"
-        )
-
-        confirm_pwd = st.text_input(
-            "Confirm Password",
-            type="password",
-            key="signup_confirm"
-        )
-
-        st.markdown("**Cold start profile (optional)**")
-        st.caption("Helps mitigate the new-user cold-start problem before you have watch history.")
-        fav_gen = st.multiselect(
-            "Favourite genres", COLD_START_GENRE_OPTIONS, key="signup_fav_gen"
-        )
-        fav_movie = st.text_input(
-            "A favourite movie (partial title is OK)", key="signup_fav_movie", max_chars=180
-        )
-        mood_pre = st.selectbox(
-            "Preferred mood vibe",
-            ["—"] + list(MOOD_GENRE_MAP.keys()),
-            key="signup_mood",
-        )
-
-        if st.button("Create Account", use_container_width=True):
-            ok, msg = _signup(
-                new_user,
-                new_pwd,
-                confirm_pwd,
-                fav_gen or None,
-                fav_movie,
-                mood_pre,
+    _, center_col, _ = st.columns([1, 2.2, 1])
+    with center_col:
+        try:
+            ctx = st.container(border=True)
+        except TypeError:
+            ctx = st.container()
+        with ctx:
+            st.markdown(
+                "<div style='text-align:center;font-size:2.35rem;font-weight:700;"
+                "margin:0 0 0.35rem 0;color:#f8fafc;line-height:1.15;'>🎬 RecoMind</div>",
+                unsafe_allow_html=True,
+            )
+            st.markdown(
+                "<div style='text-align:center;font-size:0.88rem;color:#64748b;"
+                "margin:0 0 0.85rem 0;line-height:1.45;'>AI-powered emotional movie recommendation system</div>",
+                unsafe_allow_html=True,
             )
 
-            if ok:
-                st.success(msg + " Please log in.")
-            else:
-                st.error(msg)
+            # Single-branch auth: avoids tabs executing both panes (duplicate / ghost inputs).
+            auth_mode = st.radio(
+                "Account",
+                ["Login", "Sign Up"],
+                horizontal=True,
+                key="auth_mode_switch",
+                label_visibility="collapsed",
+            )
 
-    st.markdown("</div>", unsafe_allow_html=True)
+            if auth_mode == "Login":
+                uname = st.text_input("Username", key="login_user", placeholder="your_username")
+                pwd = st.text_input("Password", type="password", key="login_pwd")
+                st.caption("Letters, digits, underscore · 3–32 characters.")
+
+                col_login, col_guest = st.columns(2)
+
+                with col_login:
+                    if st.button("Login", use_container_width=True):
+                        ok, msg = _login(uname, pwd)
+
+                        if ok:
+                            st.session_state["logged_in"] = True
+                            st.session_state["username"] = uname.strip().lower()
+                            st.rerun()
+                        else:
+                            st.error(msg)
+
+                with col_guest:
+                    if st.button("👤 Guest / Demo", use_container_width=True):
+                        st.session_state["logged_in"] = True
+                        st.session_state["username"] = "guest"
+                        st.rerun()
+
+            else:
+                new_user = st.text_input("Choose Username", key="signup_user", placeholder="e.g. smit_patel")
+                st.caption("3–32 characters: letters, digits, or underscore only.")
+
+                new_pwd = st.text_input(
+                    "Choose Password (min 8 chars, 1 uppercase, 1 number)",
+                    type="password",
+                    key="signup_pwd",
+                )
+
+                confirm_pwd = st.text_input(
+                    "Confirm Password",
+                    type="password",
+                    key="signup_confirm",
+                )
+
+                st.markdown("**Cold start profile (optional)**")
+                st.caption("Helps mitigate the new-user cold-start problem before you have watch history.")
+                fav_gen = st.multiselect(
+                    "Favourite genres", COLD_START_GENRE_OPTIONS, key="signup_fav_gen"
+                )
+                fav_movie = st.text_input(
+                    "A favourite movie (partial title is OK)", key="signup_fav_movie", max_chars=180
+                )
+                mood_pre = st.selectbox(
+                    "Preferred mood vibe",
+                    ["—"] + list(MOOD_GENRE_MAP.keys()),
+                    key="signup_mood",
+                )
+
+                if st.button("Create Account", use_container_width=True):
+                    ok, msg = _signup(
+                        new_user,
+                        new_pwd,
+                        confirm_pwd,
+                        fav_gen or None,
+                        fav_movie,
+                        mood_pre,
+                    )
+
+                    if ok:
+                        st.success(msg + " Please log in.")
+                    else:
+                        st.error(msg)
 
     return False
 
@@ -1734,11 +1745,12 @@ def render_dashboard_tab(gmap: Dict[str, str], avg_ratings: Dict[str, float], la
 # ─────────────────────────────────────────────────────────────────
 def main() -> None:
     st.set_page_config(page_title="RecoMind", page_icon="🎬", layout="wide")
-    st.markdown(DARK_CARD_CSS, unsafe_allow_html=True)
 
+    # Auth first: no dashboard CSS/widgets until logged in (avoids layout shift + stray inputs).
     if not render_auth_screen():
         st.stop()
 
+    st.markdown(DARK_CARD_CSS, unsafe_allow_html=True)
     _init_auth_db()
 
     st.title("🎬 RecoMind")
