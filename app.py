@@ -275,44 +275,92 @@ def render_auth_screen() -> bool:
     if st.session_state.get("logged_in"):
         return True
 
-    st.title("🎬 RecoMind")
-    st.markdown("#### Please log in to continue")
+    # Centered auth container CSS
+    st.markdown("""
+    <style>
+    .auth-container {
+        max-width: 520px;
+        margin: 60px auto;
+        padding: 2rem 2rem 1.5rem;
+        background: #0d1117;
+        border: 1px solid #1f2937;
+        border-radius: 18px;
+        box-shadow: 0 0 30px rgba(0,0,0,0.35);
+    }
+
+    .auth-title {
+        text-align: center;
+        font-size: 2.8rem;
+        font-weight: 700;
+        margin-bottom: 1.5rem;
+        color: #f8fafc;
+    }
+
+    div[data-baseweb="tab-list"] {
+        justify-content: center;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # Start centered container
+    st.markdown('<div class="auth-container">', unsafe_allow_html=True)
+
+    st.markdown(
+        "<div class='auth-title'>🎬 RecoMind</div>",
+        unsafe_allow_html=True
+    )
 
     tab_login, tab_signup = st.tabs(["Login", "Sign Up"])
 
     with tab_login:
         uname = st.text_input("Username", key="login_user")
-        pwd   = st.text_input("Password", type="password", key="login_pwd")
-        col_login, col_guest = st.columns([2, 1])
+        pwd = st.text_input("Password", type="password", key="login_pwd")
+
+        col_login, col_guest = st.columns(2)
+
         with col_login:
             if st.button("Login", use_container_width=True):
                 ok, msg = _login(uname, pwd)
+
                 if ok:
                     st.session_state["logged_in"] = True
-                    st.session_state["username"]  = uname.strip().lower()
+                    st.session_state["username"] = uname.strip().lower()
                     st.rerun()
                 else:
                     st.error(msg)
+
         with col_guest:
             if st.button("👤 Guest / Demo", use_container_width=True):
                 st.session_state["logged_in"] = True
-                st.session_state["username"]  = "guest"
+                st.session_state["username"] = "guest"
                 st.rerun()
 
     with tab_signup:
-        new_user    = st.text_input("Choose Username", key="signup_user")
-        new_pwd     = st.text_input("Choose Password (min 8 chars, 1 uppercase, 1 number)",
-                                    type="password", key="signup_pwd")
-        confirm_pwd = st.text_input("Confirm Password", type="password", key="signup_confirm")
+        new_user = st.text_input("Choose Username", key="signup_user")
+
+        new_pwd = st.text_input(
+            "Choose Password (min 8 chars, 1 uppercase, 1 number)",
+            type="password",
+            key="signup_pwd"
+        )
+
+        confirm_pwd = st.text_input(
+            "Confirm Password",
+            type="password",
+            key="signup_confirm"
+        )
+
         if st.button("Create Account", use_container_width=True):
             ok, msg = _signup(new_user, new_pwd, confirm_pwd)
+
             if ok:
                 st.success(msg + " Please log in.")
             else:
                 st.error(msg)
 
-    return False
+    st.markdown("</div>", unsafe_allow_html=True)
 
+    return False
 
 # ─────────────────────────────────────────────────────────────────
 #  Data layer
