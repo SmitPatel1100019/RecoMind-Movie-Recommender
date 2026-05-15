@@ -12,8 +12,114 @@ import numpy as np
 import pandas as pd
 from pandas.errors import EmptyDataError, ParserError
 import requests
-import streamlit as st
+import streamlit as st 
 
+st.markdown("""
+<style>
+
+.stApp {
+    background: radial-gradient(circle at top, #0d1224 0%, #050816 60%, #02040d 100%);
+    color: white;
+    font-family: 'Segoe UI', sans-serif;
+}
+
+/* Hide Streamlit branding */
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
+
+
+.auth-container {
+    max-width: 520px;
+    margin: 60px auto;
+    padding: 40px;
+    border-radius: 24px;
+
+    background: rgba(255,255,255,0.04);
+
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+
+    border: 1px solid rgba(255,255,255,0.12);
+
+    box-shadow:
+        0 8px 32px rgba(0,0,0,0.45),
+        inset 0 1px 0 rgba(255,255,255,0.05);
+}
+
+
+.logo-title {
+    text-align: center;
+    font-size: 52px;
+    font-weight: 800;
+    margin-bottom: 30px;
+    color: white;
+}
+
+
+.stTabs [data-baseweb="tab-list"] {
+    gap: 40px;
+    justify-content: center;
+}
+
+.stTabs [data-baseweb="tab"] {
+    color: #aaa;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.stTabs [aria-selected="true"] {
+    color: #ff4b4b !important;
+    border-bottom: 2px solid #ff4b4b;
+}
+
+
+.stTextInput > div > div > input {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px;
+    padding: 14px;
+    color: white;
+    font-size: 16px;
+}
+
+.stTextInput > label {
+    color: white !important;
+    font-size: 16px;
+    font-weight: 500;
+}
+
+
+.stButton > button {
+    width: 100%;
+    border-radius: 14px;
+    padding: 14px 0;
+
+    background: linear-gradient(90deg, #ff3c3c, #a10000);
+
+    color: white;
+    font-size: 20px;
+    font-weight: 700;
+
+    border: none;
+
+    transition: 0.3s ease;
+}
+
+.stButton > button:hover {
+    transform: scale(1.02);
+    box-shadow: 0 0 18px rgba(255,75,75,0.5);
+}
+
+
+.or-text {
+    text-align:center;
+    color:#888;
+    margin:18px 0;
+}
+
+</style>
+""", unsafe_allow_html=True)
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(ROOT_DIR, "Data", "MovieLens")
