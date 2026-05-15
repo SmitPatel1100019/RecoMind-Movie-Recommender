@@ -22,6 +22,21 @@ st.markdown("""
     color: white;
     font-family: 'Segoe UI', sans-serif;
 }
+/* Center whole login container */
+[data-testid="stAppViewContainer"] {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Main block width + centering */
+.main .block-container {
+    max-width: 450px;
+    padding-top: 3rem;
+    padding-bottom: 3rem;
+    margin: auto;
+}
+
 
 /* Hide Streamlit branding */
 #MainMenu {visibility: hidden;}
