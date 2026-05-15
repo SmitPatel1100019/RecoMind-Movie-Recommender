@@ -469,7 +469,6 @@ def render_auth_screen() -> bool:
 
     _init_auth_db()
 
-    # ── FIX 1: wider container + title white-space + responsive breakpoint ──
     st.markdown("""
     <style>
     [data-testid="stAppViewContainer"] { background-color: #0d1117; }
@@ -522,14 +521,14 @@ def render_auth_screen() -> bool:
     </style>
     """, unsafe_allow_html=True)
 
-    _, center_col, _ = st.columns([1, 4, 1])   # FIX 1b: wider centre column ratio
+    _, center_col, _ = st.columns([1, 4, 1])  
     with center_col:
         try:
             ctx = st.container(border=True)
         except TypeError:
             ctx = st.container()
         with ctx:
-            # FIX 2: use the CSS class with white-space:nowrap
+          
             st.markdown(
                 "<div class='auth-brand-title'>🎬 RecoMind</div>",
                 unsafe_allow_html=True,
@@ -554,8 +553,7 @@ def render_auth_screen() -> bool:
                 pwd   = st.text_input("Password", type="password", key="login_pwd")
                 st.caption("Letters, digits, underscore · 3–32 characters.")
 
-                # FIX 3: asymmetric columns so Login gets more space
-                # FIX 4: shorter guest button label prevents wrapping
+
                 col_login, col_guest = st.columns([3, 2])
 
                 with col_login:
@@ -569,7 +567,7 @@ def render_auth_screen() -> bool:
                             st.error(msg)
 
                 with col_guest:
-                    if st.button("👤 Guest Demo", use_container_width=True):  # FIX 4
+                    if st.button("👤 Guest", use_container_width=True):  
                         st.session_state["logged_in"] = True
                         st.session_state["username"]  = "guest"
                         st.rerun()
