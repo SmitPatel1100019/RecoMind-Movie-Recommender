@@ -1,3 +1,4 @@
+mport html
 import os
 import re
 import sqlite3
@@ -12,13 +13,6 @@ import pandas as pd
 from pandas.errors import EmptyDataError, ParserError
 import requests
 import streamlit as st
-
-st.set_page_config(
-    page_title="RecoMind",
-    page_icon="🎬",
-    layout="centered",
-    initial_sidebar_state="collapsed",
-)
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(ROOT_DIR, "Data", "MovieLens")
@@ -92,60 +86,11 @@ MOVIE_SYNOPSES = {
     "default": "A compelling film that takes audiences on an unforgettable journey. Widely praised for its storytelling, performances, and direction.",
 }
 
-GLOBAL_CSS = """<style>
+DARK_CARD_CSS = """<style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Space+Mono:wght@400;700&display=swap');
-html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; background-color:#071021; color:#e6eef8; }
+html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
 .auth-brand-title { text-align:center; font-size:3rem; font-weight:800; color:#f8fafc; line-height:1.15; margin:0 0 .35rem 0; white-space:nowrap; }
 </style>"""
-
-LOGIN_CARD_CSS = """
-<style>
-.block-container {
-    max-width: 1000px !important;
-    padding-top: 2rem;
-}
-
-.login-box {
-    width: 100%;
-    max-width: 520px;
-    margin: 0 auto;
-    padding: 28px;
-    border-radius: 18px;
-    border: 1px solid rgba(255,255,255,0.08);
-    background: rgba(10,15,25,0.92);
-    box-shadow: 0 0 30px rgba(0,0,0,0.35);
-}
-
-.login-title {
-    font-size: 42px;
-    font-weight: 800;
-    text-align: center;
-    color: #ffffff;
-    margin-bottom: 8px;
-    white-space: nowrap;
-}
-.login-subtitle {
-    text-align: center;
-    color: #94a3b8;
-    margin-bottom: 18px;
-    font-size: 0.95rem;
-}
-
-.stButton > button {
-    width: 100%;
-    border-radius: 10px;
-    height: 44px;
-    font-size: 15px;
-}
-
-.stTextInput input, .stTextArea textarea {
-    border-radius: 10px;
-    height: 44px;
-}
-
-.auth-brand-title, .login-title { word-break: keep-all; overflow-wrap: normal; }
-</style>
-"""
 
 SKELETON_HTML = """
 <div style="background:#0d1117;border:1px solid #1f2937;border-radius:10px;padding:.95rem 1.15rem;margin-bottom:.55rem;">
@@ -326,63 +271,74 @@ def render_auth_screen() -> bool:
     if st.session_state.get("logged_in"):
         return True
     _init_auth_db()
-    st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
-    st.markdown(LOGIN_CARD_CSS, unsafe_allow_html=True)
-
-    with st.container():
-        st.markdown("<div class='login-box'>", unsafe_allow_html=True)
-        st.markdown("<div class='login-title'>🎬 RecoMind</div>", unsafe_allow_html=True)
-        st.markdown("<div class='login-subtitle'>AI-powered emotional movie recommendation system</div>", unsafe_allow_html=True)
-
-        auth_mode = st.radio(
-            "Account",
-            ["Login", "Sign Up"],
-            horizontal=True,
-            key="auth_mode_switch",
-            label_visibility="collapsed",
-        )
-
-        if auth_mode == "Login":
-            uname = st.text_input("Username", key="login_user", placeholder="your_username")
-            pwd   = st.text_input("Password", type="password", key="login_pwd")
-            st.caption("Letters, digits, underscore · 3–32 characters.")
-
-            col_login, col_guest = st.columns(2)
-            with col_login:
-                if st.button("Login", use_container_width=True):
-                    ok, msg = _login(uname, pwd)
-                    if ok:
+    st.markdown(DARK_CARD_CSS, unsafe_allow_html=True)
+    st.markdown("""
+    <style>
+    [data-testid="stAppViewContainer"] { background-color: #0d1117; }
+    [data-testid="stHeader"] { background-color: transparent; }
+    section.main > div { min-height: calc(100vh - 5rem); display:flex; flex-direction:column; justify-content:center; align-items:stretch; padding-top:0 !important; }
+    .block-container { padding-top:0.5rem !important; padding-bottom:2rem !important; max-width:680px !important; min-width:420px !important; margin-left:auto !important; margin-right:auto !important; }
+    @media (max-width:768px) { .block-container { min-width:unset !important; width:95% !important; padding-left:1rem !important; padding-right:1rem !important; } .auth-brand-title { font-size:2.2rem !important; } }
+    </style>
+    """, unsafe_allow_html=True)
+    _, center_col, _ = st.columns([1, 4, 1])
+    with center_col:
+        try:
+            ctx = st.container(border=True)
+        except TypeError:
+            ctx = st.container()
+        with ctx:
+            st.markdown("<div class='auth-brand-title'>🎬 RecoMind</div>", unsafe_allow_html=True)
+            st.markdown(
+                "<div style='text-align:center;font-size:0.88rem;color:#64748b;margin:0 0 0.85rem 0;line-height:1.45;'>"
+                "AI-powered emotional movie recommendation system</div>",
+                unsafe_allow_html=True,
+            )
+            auth_mode = st.radio(
+                "Account",
+                ["Login", "Sign Up"],
+                horizontal=True,
+                key="auth_mode_switch",
+                label_visibility="collapsed",
+            )
+            if auth_mode == "Login":
+                uname = st.text_input("Username", key="login_user", placeholder="your_username")
+                pwd   = st.text_input("Password", type="password", key="login_pwd")
+                st.caption("Letters, digits, underscore · 3–32 characters.")
+                col_login, col_guest = st.columns([3, 2])
+                with col_login:
+                    if st.button("Login", use_container_width=True):
+                        ok, msg = _login(uname, pwd)
+                        if ok:
+                            st.session_state["logged_in"] = True
+                            st.session_state["username"]  = uname.strip().lower()
+                            st.rerun()
+                        else:
+                            st.error(msg)
+                with col_guest:
+                    if st.button("👤 Guest Demo", use_container_width=True):
                         st.session_state["logged_in"] = True
-                        st.session_state["username"]  = uname.strip().lower()
+                        st.session_state["username"]  = "guest"
                         st.rerun()
+            else:
+                new_user    = st.text_input("Choose Username", key="signup_user", placeholder="e.g. smit_patel")
+                st.caption("3–32 characters: letters, digits, or underscore only.")
+                new_pwd     = st.text_input(
+                    "Choose Password (min 8 chars, 1 uppercase, 1 number)",
+                    type="password", key="signup_pwd",
+                )
+                confirm_pwd = st.text_input("Confirm Password", type="password", key="signup_confirm")
+                st.markdown("**Cold start profile (optional)**")
+                st.caption("Helps mitigate the new-user cold-start problem before you have watch history.")
+                fav_gen   = st.multiselect("Favourite genres", COLD_START_GENRE_OPTIONS, key="signup_fav_gen")
+                fav_movie = st.text_input("A favourite movie (partial title is OK)", key="signup_fav_movie", max_chars=180)
+                mood_pre  = st.selectbox("Preferred mood vibe", ["—"] + list(MOOD_GENRE_MAP.keys()), key="signup_mood")
+                if st.button("Create Account", use_container_width=True):
+                    ok, msg = _signup(new_user, new_pwd, confirm_pwd, fav_gen or None, fav_movie, mood_pre)
+                    if ok:
+                        st.success(msg + " Please log in.")
                     else:
                         st.error(msg)
-            with col_guest:
-                if st.button("Continue as Guest", use_container_width=True):
-                    st.session_state["logged_in"] = True
-                    st.session_state["username"]  = "guest"
-                    st.rerun()
-        else:
-            new_user    = st.text_input("Choose Username", key="signup_user", placeholder="e.g. smit_patel")
-            st.caption("3–32 characters: letters, digits, or underscore only.")
-            new_pwd     = st.text_input(
-                "Choose Password (min 8 chars, 1 uppercase, 1 number)",
-                type="password", key="signup_pwd",
-            )
-            confirm_pwd = st.text_input("Confirm Password", type="password", key="signup_confirm")
-            st.markdown("**Cold start profile (optional)**")
-            st.caption("Helps mitigate the new-user cold-start problem before you have watch history.")
-            fav_gen   = st.multiselect("Favourite genres", COLD_START_GENRE_OPTIONS, key="signup_fav_gen")
-            fav_movie = st.text_input("A favourite movie (partial title is OK)", key="signup_fav_movie", max_chars=180)
-            mood_pre  = st.selectbox("Preferred mood vibe", ["—"] + list(MOOD_GENRE_MAP.keys()), key="signup_mood")
-            if st.button("Create Account", use_container_width=True):
-                ok, msg = _signup(new_user, new_pwd, confirm_pwd, fav_gen or None, fav_movie, mood_pre)
-                if ok:
-                    st.success(msg + " Please log in.")
-                else:
-                    st.error(msg)
-
-        st.markdown("</div>", unsafe_allow_html=True)
     return False
 
 def _ensure_data_downloaded() -> Tuple[str, str]:
@@ -493,33 +449,25 @@ def recommend_for_user(username: str, df: pd.DataFrame, movies_df: pd.DataFrame,
             for title, g in gmap.items():
                 if title in seen:
                     continue
-                score = sum(1 for gg in genres if gg in g)
-                if score > 0:
-                    candidates.append((title, score))
+                if any(gg in g for gg in genres):
+                    candidates.append(title)
             if len(candidates) >= top_k:
-                candidates = sorted(candidates, key=lambda x: x[1], reverse=True)
-                return [title for title, _ in candidates[:top_k]]
+                return candidates[:top_k]
     pop = df["title"].value_counts().head(top_k).index.tolist()
     return pop
 
 def main():
+    st.set_page_config(page_title="RecoMind", layout="centered", initial_sidebar_state="collapsed")
     st.markdown("<meta name='viewport' content='width=device-width, initial-scale=1'>", unsafe_allow_html=True)
     logged = render_auth_screen()
     if not logged:
         return
     username = st.session_state.get("username", "guest")
-    st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
+    st.markdown(DARK_CARD_CSS, unsafe_allow_html=True)
+    st.header(f"Welcome, {username}")
 
-    if username == "guest":
-        st.header("Welcome to RecoMind 🎬")
-    else:
-        st.header(f"Welcome, {username}")
-
+    # Replaced underselling demo text with concise capability caption
     st.caption("Collaborative filtering · Mood-aware · Wellbeing filter · TextBlob NLP · TMDB")
-    st.markdown("---")
-    if st.button("Logout"):
-        st.session_state.clear()
-        st.rerun()
 
     with st.sidebar:
         st.markdown("## Filters")
@@ -528,32 +476,24 @@ def main():
         if st.button("Reload data"):
             load_and_prepare_data.clear()
             st.rerun()
-
     try:
         df, movies_df, umm, gmap = load_and_prepare_data(top_n_movies=top_n_movies, top_n_users=top_n_users)
     except Exception as e:
         st.error(f"Could not load dataset: {e}")
         st.info("Place MovieLens CSVs under Data/MovieLens/ or ensure network access for first-time download.")
         return
-
     recs = recommend_for_user(username, df, movies_df, umm, gmap, top_k=6)
     st.subheader("Recommended for you")
     cols = st.columns(3)
     for i, title in enumerate(recs):
         with cols[i % 3]:
             st.markdown(f"**{title}**")
-            
-            genres = gmap.get(title, "Unknown Genre")
-            st.caption(f"🎭 {genres}")
             synopsis = MOVIE_SYNOPSES.get(title, MOVIE_SYNOPSES["default"])
             st.caption(synopsis)
-            if username != "guest":
-                st.caption("Recommended based on your watch history")
             if st.button(f"Mark watched: {title}", key=f"watched_{i}"):
                 watch_history_push(username, title)
                 st.success(f"Added {title} to your watch history.")
                 st.rerun()
-
     st.markdown("---")
     st.subheader("Your recent watch history")
     hist = watch_history_list(username)
@@ -563,6 +503,7 @@ def main():
     else:
         st.info("No watch history yet. Use the recommendations above or try the Guest Demo.")
 
+    # Updated footer for presentation
     st.markdown("<div style='margin-top:2rem;color:#64748b;font-size:0.9rem;'>RecoMind · Built by Smit Patel 🚀 · MovieLens · Streamlit</div>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
